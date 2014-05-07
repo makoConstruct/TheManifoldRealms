@@ -1,0 +1,600 @@
+@import "prefixer";
+
+body{
+	z-index: -60;
+	background-color: rgb(255,255,255);
+	color:#020202;
+	font-family:'Lato', sans-serif;
+	font-size: 13px;
+	padding: 0px;
+	margin: 0px;
+}
+
+body > *{
+	z-index: 20;
+}
+
+::selection{background-color: #dadada;}
+::-moz-selection{background-color: #dadada;}
+
+a { color:#040404; font-weight:700;     text-decoration:none; }
+a.external::after {
+	.transition( all 230ms ease-in-out);
+	content:'⇸';
+	/*strongly considered '⤯', but it looks like an X, which does not work.*/
+	color:#d0d0d0;
+}
+a.external:hover::after {color:#000000}
+
+p{
+	margin:0; /*why does margin overlap its bounds? How is that useful?*/
+	padding-bottom: 9px;
+}
+
+#graff {
+	z-index: 5;
+	position: fixed;
+	color: #d0d0d0;
+	background-color: #ffffff;
+	left:0px; top:0px; right:0px;
+	width: 100%;
+	height: 100%;
+}
+
+.graffCanvas{
+	opacity: 1;
+	.animation( dally 6s ease-in-out 0s 1 normal forwards);
+}
+@-webkit-keyframes dally {0%{opacity: 0} 40%{opacity: 0} 100%{opacity: 1}}
+@-moz-keyframes dally {0%{opacity: 0} 40%{opacity: 0} 100%{opacity: 1}}
+@-ms-keyframes dally {0%{opacity: 0} 40%{opacity: 0} 100%{opacity: 1}}
+@-o-keyframes dally {0%{opacity: 0} 40%{opacity: 0} 100%{opacity: 1}}
+@keyframes dally {0%{opacity: 0} 40%{opacity: 0} 100%{opacity: 1}}
+
+#loginimage {
+	float:left;
+	width: 40px;
+	height: 31px;
+}
+#loginimagesmall {
+	float:left;
+	width: 22px;
+	height: 17px;
+}
+
+/*#godFaceContainer {
+	display: inline-block;
+	text-align: center;
+	vertical-align: bottom;
+	overflow: hidden;
+	width: 0px;
+	.transition( all 0.22s ease-out 0.3s);
+}
+#godFace {
+	position: relative;
+	display: inline;
+	height: 50px;
+	width: 50px;
+	opacity: 0;
+	.transition( all 0.3s ease-in);
+}
+body.editMode{
+	#godFaceContainer {
+		.transition( all 0.22s ease-out);
+		width: 50px;
+	}
+	#godFace {
+		.transition( all 0.3s ease-in 0.22s);
+		opacity: 1;
+	}
+}*/
+
+#topBar{
+	padding-top: 18px;
+	padding-bottom: 18px;
+}
+#titleFlow {
+	text-align: center;
+	font-size: 55px;
+	font-family:'Gafata', sans-serif;
+}
+#title:empty:after {
+	color: #b3b3b3;
+	font-variant: italic;
+	content: 'Enter Title';
+}
+#triangle {
+	opacity: 0.13;
+}
+.loggedIn #triangle {
+	opacity: 1;
+}
+
+.responds { cursor: pointer; }
+
+.collapsed { display: none; }
+
+#ghosty {
+	position: fixed;
+	z-index: 100;
+	left: 0px;
+	top: 0px;
+	height: 27px;
+	width: 27px;
+	padding: 6px;
+	opacity: 0;
+	.transition( all 0.2s ease-in-out);
+}
+
+body.indicatorsShown:not(.proDeployer) #ghosty {
+	.transition(all 6s ease-in-out);
+	opacity: 0.23;
+}
+#ghosty:hover, body.controlsDeployed #ghosty {
+	.transition(all 0.2s ease-in-out);
+	opacity: 0.23;
+}
+
+
+// #sideIndicater {
+// 	position: fixed;
+// 	pointer-events: none;
+// 	opacity: 0;
+// 	left: -16px;
+// 	.transition( all 0.26s ease-in-out);
+// }
+// body.indicatorsShown:not(.touchMode) #sideIndicater:not(.hidden){
+// 	left: 0px;
+// 	opacity: 1;
+// 	.transition( all 3.3s ease-in-out);
+// }
+
+#controls {
+	position:fixed;
+	text-align: left;
+	z-index: 50;
+	top: 0px;
+	left: 0px;
+	bottom: 0px;
+	width: 200px;
+	background-color: rgba(255,255,255,0.6);
+	.transition( all 0.2s ease-in-out);
+}
+body.controlsDeployed #controls {
+	left: 0px;
+	opacity: 1;
+}
+body:not(.controlsDeployed) #controls {
+	left:-20px;
+	opacity:0;
+	pointer-events:none;
+}
+// .hidden * {
+// 	pointer-events:none;
+// }
+
+.controlSubscript {
+	color: #999999;
+	padding-top: 6px;
+	padding-left: 4px;
+	font-size: 12px;
+}
+.trayItem {
+	font-weight: 600;
+	cursor: pointer;
+	padding-top: 2px;
+	padding-left: 8px;
+	padding-right: 5px;
+	.transition( all 0.2s);
+}
+.trayItem:hover {
+	padding-left: 13px;
+	padding-right: 0px;
+}
+
+#controlContents {
+	overflow-y: auto;
+}
+
+body:not(.loggedIn) .loggedInOnly {
+	display: none;}
+.loggedIn .loggedOutOnly{
+	display: none;}
+
+body:not(.editMode) .editModeOnly {
+	display: none;}
+.editMode .readingModeOnly {
+	display: none;}
+
+.unselected {
+	opacity: 0.8;
+}
+
+body:not(.editMode) .editVisible {
+	opacity: 0;
+	pointer-events: none;
+}
+.editMode .editVisible {
+	opacity: 1;
+	pointer-events: auto;
+}
+
+.tip {
+	position: fixed;
+	z-index: 140;
+	color: #000000;
+	text-align: center;
+	pointer-events: none;
+	font-family: 'Gafata', sans-serif;
+	font-size: 20px;
+	width: 178px;
+	border:6px;
+	border-radius: 3px;
+	background-color: rgba(255,255,255,0.65);
+	opacity: 0;
+	.transition( all 0.2s ease-in-out);
+}
+
+.tip.opaque {
+	opacity: 1;
+}
+
+#prop {
+	width:0px;
+}
+
+
+#action {
+	position: fixed;
+	display: inline-block;
+	background-color: #000000;
+	overflow: hidden;
+	z-index: 70;
+	bottom: 0px;
+	left: 0px;
+	right: 0px;
+	margin:0px;
+	color: #B8D6B9;
+	font-family:monospace;
+}
+
+.line {
+	display: block;
+	width: 100%;
+	font-weight: 700;
+	.animation( fadein 240ms ease-in 0s 1 normal forwards);
+}
+@-webkit-keyframes fadein { 0%{opacity:0;} 50%{opacity:0;} 100%{opacity:1;} }
+@-moz-keyframes fadein { 0%{opacity:0;} 50%{opacity:0;} 100%{opacity:1;} }
+@-ms-keyframes fadein { 0%{opacity:0;} 50%{opacity:0;} 100%{opacity:1;} }
+@-o-keyframes fadein { 0%{opacity:0;} 50%{opacity:0;} 100%{opacity:1;} }
+@keyframes fadein { 0%{opacity:0;} 50%{opacity:0;} 100%{opacity:1;} }
+
+.line.feedback {
+	color: #FFBF00;
+}
+#backlog {
+	.transition( all 140ms ease-out);
+	width: 100%;
+	position:absolute;
+	top:0px;
+	left:0px;
+}
+#bay {
+	width: 100%;
+	position:absolute;
+	top:0px;
+	left:0px;
+}
+#cli {
+	padding:0px;
+	outline: none;
+	background: none;
+	border: none;
+	margin: 0px;
+	-webkit-appearance: none;
+	-moz-appearance: none;
+	-ie-appearance: none;
+	-o-appearance: none;
+	appearance: none;
+	position:relative;
+	left:0px;
+	top:0px;
+	color: #B8D6B9;
+	font-family:monospace;
+}
+
+#illustration{
+	padding-top: 12px;
+	bottom: 0px;
+	text-align: left;
+	left: 0px;
+	right: 0px;
+	margin:0px;
+	padding:0px;
+	border:none;
+	outline: none;
+}
+
+.minorFont {
+	color: #c5c5c5;
+	.transition( all 0.3s);
+}
+:hover > .minorFont{
+	color: #000000;
+}
+
+.listLinkText {
+	color:inherit;
+	font-weight:inherit;
+	text-decoration:inherit;
+}
+body:not(.editMode) .listLink>*{
+	cursor: pointer;
+}
+.listLinkArrow {
+	padding-right: 4px;
+	float: left;
+	cursor: pointer;
+}
+
+body:not(.editMode) .treversalLink>.listLinkText {
+	display:none;
+}
+body.editMode .treversalLink>.listLinkTitle {
+	display:none;
+}
+
+.backLink {
+	position: relative;
+	/*left: -21px;*/
+}
+
+/*#scanline {
+	position: absolute;
+	pointer-events:none;
+	opacity: 0;
+	left: -4%;
+	right: -4%;
+	top: 0%;
+	height: 4px;
+	padding-top: -2px;
+	background-color: rgb(255,200,0);
+}
+@-webkit-keyframes scanaway{
+	0%{top:0%; opacity:0;}
+	7%{top:0%; opacity:1;}
+	93%{top:100%; opacity:1;}
+	100%{top:100%; opacity:0;}
+}
+.editMode #scanline {
+	-webkit-animation: scanaway 0.5s ease-in-out 0.3s 1 normal none;
+}*/
+
+.easeinout {
+	.transition( all 0.3s ease-in-out);
+}
+
+.easein { /*to be disabled when doing rapid movements*/
+	.transition( all 0.3s ease-in);
+}
+
+#changeSender{
+	opacity: 0;
+	pointer-events: none;
+	position: fixed;
+	right: -7px;
+	top: 0px;
+	cursor: pointer;
+	padding-top: 13px;
+	padding-right: 13px;
+	.easeinout;
+}
+body.editMode.modified #changeSender{
+	opacity: 1;
+	right: 0px;
+	pointer-events: auto;
+}
+
+#pageBroader {
+	position: relative;
+}
+#page {
+	position: relative;
+}
+#pageContent {
+	position: relative;
+	left: 0px;
+	opacity: 0;
+}
+body.editMode #pageContent{
+	.animation(wumph 0.42s linear 230ms 1 normal none);
+}
+@-webkit-keyframes wumph {
+	0% {opacity: 1}
+	78% {opacity: 0.29}
+	100% {opacity: 1}}
+@-ms-keyframes wumph {
+	0% {opacity: 1}
+	78% {opacity: 0.29}
+	100% {opacity: 1}}
+@-o-keyframes wumph {
+	0% {opacity: 1}
+	78% {opacity: 0.29}
+	100% {opacity: 1}}
+@keyframes wumph {
+	0% {opacity: 1}
+	78% {opacity: 0.29}
+	100% {opacity: 1}}
+
+.obscures {
+	background-color: rgba(255,255,255,0.63);
+}
+
+
+
+#linklist {
+	.linear-gradient-top(none,  rgba(255,255,255,0.63),0%,  rgba(255,255,255,0.24),100%);
+	text-align: left;
+}
+
+#spinner {
+	position: absolute;
+	pointer-events: none;
+	width: 60px;
+	height: 60px;
+	.transition( all 0.9s);
+	opacity: 0;
+}
+#spinner.showing {
+	opacity: 1;
+	.animation(spinning 7s linear 0s infinite normal forwards);
+}
+
+@-webkit-keyframes spinning {from{-webkit-transform:rotate(0deg);} to{-webkit-transform:rotate(360deg);}}
+@-moz-keyframes spinning {from{-moz-transform:rotate(0deg);} to{-moz-transform:rotate(360deg);}}
+@-ms-keyframes spinning {from{-ms-transform:rotate(0deg);} to{-ms-transform:rotate(360deg);}}
+@-o-keyframes spinning {from{-o-transform:rotate(0deg);} to{-o-transform:rotate(360deg);}}
+@keyframes spinning {from{transform:rotate(0deg);} to{transform:rotate(360deg);}}
+
+.hideySituationH(
+	@naturalLength,
+	@modeSwitch,
+	@containedId,
+	@containerId,
+	@fadeDuration: 0.3s,
+	@slideDuration: 0.22s
+){
+	#@{containerId} {
+		display: inline-block;
+		text-align: center;
+		vertical-align: bottom;
+		overflow: hidden;
+		width: 0;
+		.transition( all @slideDuration ease-out @fadeDuration);
+	}
+	#@{containedId} {
+		position: relative;
+		display: inline;
+		width: @naturalLength;
+		opacity: 0;
+		.transition( all @fadeDuration ease-in);
+	}
+	body.@{modeSwitch} {
+		#@{containerId} {
+			.transition( all @slideDuration ease-out);
+			width: @naturalLength;
+		}
+		#@{containedId} {
+			.transition( all @fadeDuration ease-in @slideDuration);
+			opacity: 1;
+		}
+	}
+}
+
+.hideySituationV(
+	@naturalLength,
+	@modeSwitch,
+	@containedId,
+	@containerId,
+	@fadeDuration: 0.3s,
+	@slideDuration: 0.22s
+){
+	#@{containerId} {
+		overflow: hidden;
+		height: 0;
+		.transition( all @slideDuration ease-out @fadeDuration);
+	}
+	#@{containedId} {
+		height: @naturalLength;
+		opacity: 0;
+		.transition( all @fadeDuration ease-in);
+	}
+	body.@{modeSwitch} {
+		#@{containerId} {
+			.transition( all @slideDuration ease-out);
+			height: @naturalLength;
+		}
+		#@{containedId} {
+			.transition( all @fadeDuration ease-in @slideDuration);
+			opacity: 1;
+		}
+	}
+}
+
+@godopHeight: 31px;
+
+.hideySituationH(50px, editMode, godFace, godFaceContainer);
+
+// .hideySituationV(@godopHeight, editMode, godOpsContainer, godOpsHidey);
+//god ops presently disabled
+
+
+@localPantheonHeight: 20px;
+
+.hideySituationV(@localPantheonHeight, editMode, localPantheon, localPantheonHidey);
+
+
+#godOpsContainer {
+	text-align: center;
+}
+#centerGodOpsHoriz {
+	display: inline-block;
+}
+#centerGodOpsHoriz > img:not(.bookend) {
+	cursor:	pointer;
+	opacity: 0.3;
+	height: @godopHeight;
+	@godopPad: 20px;
+	padding-left: @godopPad;
+	padding-right: @godopPad;
+	.transition(all 0.22s ease-in-out);
+}
+
+.bookend {
+	opacity: 0.2;
+}
+
+#centerGodOpsHoriz > img:not(.bookend):hover {
+	opacity: 1;}
+
+#bookendLeft {
+	.transform(scaleX(-1));
+}
+
+body.starred #starOp {
+	opacity: 0.9;
+}
+
+#localPantheon {
+	text-align: center;
+	height: @localPantheonHeight;
+	.godProfile {
+		display: inline-block;
+		@spacing: 30px;
+		padding-left: @spacing;
+		padding-right: @spacing;
+		padding-bottom: 0px;
+		padding-top: 0px;
+	}
+}
+
+.stuffList(@el, @title){
+	#@{el}.loggedInOnly:not(:empty)::before {
+		.controlSubscript;
+		content: @title;
+	}
+}
+
+.stuffList(identities, 'Identities');
+
+body.starred #notePage {
+	display:none;
+}
+body:not(.starred) #unnotePage {
+	display:none;
+}
+
+#starIcon {
+	display: inline;
+}

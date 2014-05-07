@@ -1,0 +1,163 @@
+about: graph database schema description.
+nodeTypes:
+- label: Position
+  about: these are places you see and navigate.
+  properties:
+  - name: illustration
+    about: the text explaining the place. First thing the user sees.
+  - name: id
+  - name: title
+    about: "what the user sees as the title of the place."
+  relations:
+  - name: TO
+    about: "neighbour is a Position that can be walked to from here, almost always visible from where the ghost stands, and must be linked to in the Position's page in one way or another. The other position is in the same realm. It is an assymetric relation, though most places simulating space should really write for both directions."
+    properties:
+    - name: relationship
+      about: a formatted description of how this realm relates to the other
+  - name: IN_REALM
+    about: "neighbor is a Realm. There is one and only one node linked with this relation."
+- label: Realm
+  about: "territories, sets of Positions, each belonging to a set of Identities."
+  properties:
+  - name: name
+    about: "db identifier. Must be unique to the entirety of the universe."
+  - name: title
+    about: "user-facing name."
+- label: User
+  properties:
+  - name: email
+  - name: id
+    about: a non-negative integer identifier
+  relations:
+  - name: REMEMBERS
+    about: links to positions this user wants to hold on to.
+  - name: IDENTIFIES
+    about: links to Identities the user owns
+- label: Identity
+  properties:
+  - name: name
+  - id: a numeric identifier
+  relations:
+  - name: MANIFESTS
+    about: links to Realms the identity is a manifester of.
+
+{
+a = b; each a is paired with a b.
+a < b; each a maps to many b, each b maps to one a
+a > b; converse
+a x b; each a maps to many b, each b maps to many a.
+
+User < Identity
+Identity x Realms
+Realms < Positions
+Positions x Positions
+}
+
+
+{json api
+
+
+{ transactions
+identity <Long, the identity number>
+authorizationKey <Long>
+ops [
+  opname create
+  realmId <id>
+
+  opname destroy
+  posId <>
+
+  opname edit
+  posId <>
+  properties[
+    {
+    property title
+    val <>
+    }
+    
+    {
+    property illustration
+    val <>
+    }
+    
+    {
+    property link
+    dst <position id>
+    illustration <>
+    }
+  ]
+
+  opname remember
+  posId <>
+  
+  opname forget
+  posId <>
+
+  opname link
+  srcWorldId <>
+  dstWorldId <>
+  ? illustration <>
+
+  opname idname
+  idId <>
+  newName <>
+
+  opname unlink
+  srcWorldId
+  dstWorldId
+
+  opname induct
+  realmId <>
+  subject <idn>
+
+  opname foundRealm
+  realmName <Evocative string>
+]
+}
+{ responses
+  //world data
+  title <>
+  id <>
+  illustration <>
+  realm <id>
+  paths [
+  id
+  title
+  relationship
+    <>
+    null
+  ]
+  backlinks [
+  id
+  title
+  ]
+  
+  status shiny
+    //successful logins:
+    token <>
+    user {
+    email
+    id
+    identities[
+    name
+    id
+    realms [<string>]
+    ]
+    }
+    
+    //successful position creation
+    posId <>
+    
+    //successful realm foundation
+    realmId <>
+  
+  status authorization key expired
+  
+  status no
+    detail insufficient identity privilages
+  
+    detail unsupported operation
+    
+    detail no such realm
+}
+}

@@ -1,0 +1,4 @@
+wget http://repo.scala-sbt.org/scalasbt/sbt-native-packages/org/scala-sbt/sbt/0.13.1/sbt.deb
+dpkg sbt.deb
+wget http://downloads.typesafe.com/play/2.2.1/play-2.2.1.zip
+unzip play-2.2.1.zip

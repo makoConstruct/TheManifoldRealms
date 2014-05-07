@@ -1,0 +1,96 @@
+@(surroundData: play.api.libs.json.JsArray, startingId: String)
+@import play.api.libs.json._
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<title>The Manifold</title>
+		<meta charset="utf-8"/>
+		<link rel="shortcut icon" type="image/png" href="@routes.Assets.at("images/favicon.png")">
+		<link rel="stylesheet" href="@routes.Assets.at("stylesheets/main.css")">
+		<link rel="stylesheet" href="@routes.Assets.at("stylesheets/medium-editor.min.css")">
+		<link rel="stylesheet" href="@routes.Assets.at("stylesheets/medium-default.min.css")">
+		<!-- <link href="http://fonts.googleapis.com/css?family=Prata" rel="stylesheet" type="text/css"> -->
+		<!-- <link href="//fonts.googleapis.com/css?family=Open+Sans:400,700|Gafata" rel="stylesheet" type="text/css"> -->
+		<link href="//fonts.googleapis.com/css?family=Lato:400|Gafata" rel="stylesheet" type="text/css">
+		<meta http-equiv="X-UA-Compatible" content="IE=Edge"> <!-- Prevents IE compatability mode for the sake of Persona, although I think we've already dropped support for older versions of IE somewhere so I'm not sure this is needed xD -->
+		<script language="javascript">
+			surroundData = @Html(Json.stringify(surroundData));
+			startingId = "@(startingId)";
+		</script>
+		<!-- <script language="javascript" src="@routes.Assets.at("javascripts/markdown.min.js")"></script> -->
+		<script language="javascript" src="https://login.persona.org/include.js"></script>
+		<script language="javascript" src="@routes.Assets.at("javascripts/shiver.js")"></script>
+		<script language="javascript" src="@routes.Assets.at("javascripts/Wellrng.js")"></script>
+		<script language="javascript" src="@routes.Assets.at("javascripts/hexfaces.js")"></script>
+		<script language="javascript" src="@routes.Assets.at("javascripts/Pip.js")"></script>
+		<script language="javascript" src="@routes.Assets.at("javascripts/springy.js")"></script>
+		<script language="javascript" src="@routes.Assets.at("javascripts/medium-editor.js")"></script>
+		<script language="javascript" src="@routes.Assets.at("javascripts/grandMoment.js")"></script>
+		<!-- <script language="javascript" src="cake.js"></script>   eventually, when they finish the fucking docs.-->
+	</head>
+	<body>
+		<div id="graff"> </div>
+		<div id="pageBroader">
+			<div id="topBar" class = "obscures">
+				<div id="localPantheonHidey">
+					<div id="localPantheon"></div>
+				</div>
+				<div id="titleFlow" class="easeinout">
+					<span id="title" contentEditable="false"></span>
+					<span id="godFaceContainer"></span>
+				</div>
+				<!-- <div id="godOpsHidey">
+					<div id="godOpsContainer">
+						<div id="centerGodOpsHoriz">
+							<img id="deleteOp" class="godOp" title="delete position" src="@routes.Assets.at("images/delete.svg")"/>
+						</div>
+					</div>
+				</div> -->
+				<!-- <img id="triangle" src="@routes.Assets.at("images/triangle.svg")"> -->
+			</div>
+			<div id="page">
+				<div id="pageContent">
+					<div id="illustrationContainer" class="obscures">
+						<div id="illustration" class="editable"></div>
+					</div>
+					<div id="linklist"></div>
+				</div>
+			</div>
+		</div>
+		<div id="prop"></div>
+		<img id="ghosty" class="responds" src="@routes.Assets.at("images/configicon.png")"/>
+		<img id="sideIndicater" src="@routes.Assets.at("images/sideIndicater.png")"/>
+		<img id="changeSender" src="@routes.Assets.at("images/changeSender.svg")"/>
+		<div id="controls" class="hidden">
+			<div id="ghostyMimic"></div>
+			<div id="controlContents">
+				<div id="editMode" class="trayItem loggedInOnly readingModeOnly">Become God</div>
+				<div id="unEditMode" class="trayItem loggedInOnly editModeOnly">Become Ghost</div>
+				<div id="identities" class="loggedInOnly"></div>
+				<div id="loginQuestion" class="loggedOutOnly controlSubscript">
+					Want to alter the manifold?
+				</div>
+				<div id="login" class="loggedOutOnly trayItem">
+					<img id="loginimagesmall" src="@routes.Assets.at("images/personasmall.svg")"/> Identify yourself with the <em>Mozilla Persona</em> system.
+				</div>
+				<div id="logoutQuestion" class="loggedInOnly controlSubscript">Tired of having a face?</div>
+				<div id="logout" class="loggedInOnly trayItem">
+				<img id="logoutimagesmall" src="@routes.Assets.at("images/antipersonasmall.svg")"/> <b>  sign out</b>.
+				</div>
+				<!-- <div id="notedPagesTitle" class="loggedInOnly controlSubscript">Collection</div> -->
+				<div id="notePage" class="trayItem loggedInOnly">
+					<img id="starIcon" src="@routes.Assets.at("images/star.svg")"/> remember this</div>
+				<div id="unnotePage" class="trayItem loggedInOnly">
+					<img id="starIcon" src="@routes.Assets.at("images/starFilled.svg")"/> forget this</div>
+				<div id="notedPages" class="loggedInOnly"></div>
+			</div>
+		</div>
+		<img id="spinner" src="@routes.Assets.at("images/spinner.svg")"/>
+		<div id="action">
+			<span id="backlog"></span>
+			<span id="bay" class="line"></span>
+			<input id="cli" type="text" spellcheck="false" class="line">
+		</div>
+	</body>
+</html>
