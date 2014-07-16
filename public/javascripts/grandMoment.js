@@ -2303,7 +2303,7 @@ function processLine(){
 }
 
 var otherTooltipDSOff = null;
-function bindToolTip(dsOn, dsOff){ //dsOn must send {p[x,y], text}
+function bindToolTip(dsOn, dsOff){ //dsOn must send {p{x,y}, text}
 	dsOn.then(function(o){
 		if(otherTooltipDSOff){
 			otherTooltipDSOff.publish();
