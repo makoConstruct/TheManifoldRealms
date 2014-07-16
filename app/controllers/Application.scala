@@ -9,22 +9,16 @@ import org.owasp.html._
 import play.api.libs.json._
 import play.api.libs.ws._
 import play.api.libs.concurrent.Execution.Implicits._
+import java.lang.System.currentTimeMillis
+
+import Global.transact
 
 object Application extends Controller {
 	
 	def main = Action {
 		Ok(Global.defaultHtml)}
-	def defaultDomain = Action {
+	def pageFor(l:Long) = Action { //ignore l, let the client ask for what it wants.
 		Ok(Global.defaultHtml)}
-	
-	def positionData(placeSpecifier:Long) = Action{
-		Ok( Global.transact{
-			Global getPosition placeSpecifier match{
-				case Some(pos) => Json.stringify(pos js)
-				case None => "null"
-			}
-		})
-	}
 	
 	def domainData(placeSpecifier:Long) = Action{ //throws back jsons for that position and everything surrounding it.
 		Global.transact{
@@ -35,13 +29,13 @@ object Application extends Controller {
 		}
 	}
 	
-	def domain(placeSpecifier:Long) = Action{
-		Ok(Global.transact{
+	def positionData(placeSpecifier:Long) = Action{
+		Global.transact{
 			Global getPosition placeSpecifier match{
-				case Some(pos) => views.html.grandMoment(pos proximalJs, placeSpecifier.toString)
-				case None => Global.nullHtml
+				case Some(pos) => Ok(Json.stringify(pos.json))
+				case None => NotFound
 			}
-		})
+		}
 	}
 	
 	def realmData(realmId:Long) = Action{
@@ -66,12 +60,11 @@ object Application extends Controller {
 		def isShiny:Boolean
 		def toJson:JsObject
 	}
-	private class Shiny(additionalKey:String, additionalValue:String) extends Report{
+	private class Shiny(args: Pair[String, String]*) extends Report{
 		def isShiny = true
 		def toJson = JsObject(
-			"status" -> JsString("shiny") ::
-			additionalKey -> JsString(additionalValue) ::
-		Nil)
+			args.map( pair => (pair._1, JsString(pair._2)) ) :+
+			"status" -> JsString("shiny") )
 	}
 	private class BadReport(detail:String) extends Report{
 		def isShiny = false
@@ -97,46 +90,45 @@ object Application extends Controller {
 	
 	
 	private def doTransactions(ident: Identity, op:JsObject):Report ={ //returns the report of the final op, or the report of the breaking op. Should revise all db ops issued prior to a breaking op.
-		val tx = Global.db.beginTx
-		try{
-			val seq = (op \ "ops").as[Seq[JsObject]]
-			if(seq.isEmpty){
-				shiny
-			}else{
-				var res:Report = null
-				for(o <- seq){
-					res = (o \ "opname").as[String] match {
-						case "destroy" =>
-							destroyPosition(ident, o)
-						case "create" =>
-							createPosition(ident, o)
-						case "edit" =>
-							editPosition(ident, o)
-						case "link" =>
-							createLink(ident, o)
-						case "unlink" =>
-							deleteLink(ident, o)
-						case "induct" =>
-							induct(ident, o)
-						case "remember" =>
-							remember(ident, o)
-						case "forget" =>
-							forget(ident, o)
-						case "foundRealm" =>
-							foundRealm(ident, o)
-						case "idname" =>
-							changeName(ident, o)
-						case _ =>
-							new BadReport("unsupported operation")
-					}
-					if(!res.isShiny)
-						return res
-				}
-				tx.success
-				res
+		val seq = (op \ "ops").as[Seq[JsObject]]
+		if(seq.isEmpty){
+			shiny
+		}else{
+			var res:Report = null
+			for(o <- seq){
+				val opname = (o \ "opname").as[String]
+				res = transact{ opname match {
+					case "destroy" =>
+						destroyPosition(ident, o)
+					case "create" =>
+						createPosition(ident, o)
+					case "edit" =>
+						editPosition(ident, o)
+					case "link" =>
+						createLink(ident, o)
+					case "unlink" =>
+						deleteLink(ident, o)
+					case "transfer" =>
+						movePosition(ident, o)
+					case "induct" =>
+						induct(ident, o)
+					case "remember" =>
+						remember(ident, o)
+					case "forget" =>
+						forget(ident, o)
+					case "foundRealm" =>
+						foundRealm(ident, o)
+					case "idname" =>
+						changeName(ident, o)
+					case "createidentity" =>
+						createIdentity(ident, o)
+					case _ =>
+						new BadReport("unsupported operation")
+				}}
+				if(!res.isShiny)
+					return res
 			}
-		}finally{
-			tx.close
+			res
 		}
 	}
 	
@@ -156,7 +148,7 @@ object Application extends Controller {
 	private def createLink(ident:Identity, op:JsObject):Report ={
 		Global.getPosition(longFromJsString(op \ "srcWorldId")) match {
 			case Some(sw) =>{
-				if(ident manifests sw)
+				if(sw.id == Global.freeNexus /*anyone can make links from the babel origin*/ || (ident manifests sw))
 					Global.getPosition(longFromJsString(op \ "dstWorldId")) match{
 						case Some(dw) =>{
 							sw getLinkTo dw match{
@@ -174,6 +166,7 @@ object Application extends Controller {
 											sw.link(dw)
 									}
 							}
+							sw.touch
 							shiny
 						}
 						case None => new BadReport("dst position does not exist")
@@ -183,6 +176,47 @@ object Application extends Controller {
 			}
 			case None => new BadReport("src position does not exist")
 		}
+	}
+	
+	// private def createAndLinkTo(ident:Identity, op:JsObject):Report ={
+	// 	Global.getRealm(longFromJsString(op \ "realmId")) match{
+	// 		case Some(realm) =>{
+	// 			if(ident manifests realm){
+	// 				val npos = Global.instateNewPosition(realm.v)
+	// 				Global.getPosition(longFromJsString(op \ "srcLinkingId")) match {
+	// 					case Some(from) => {
+	// 						val fromRealm = from.realm
+	// 						if(realm.id == fromRealm.id || (ident manifests fromRealm)){
+	// 							(op \ "relationship").asOpt[String] match{
+	// 								case Some(relstr) =>
+	// 									from.link(relstr)(npos)
+	// 								case None =>
+	// 									from.link(npos)
+	// 							}
+	// 							new Shiny("posId" -> npos.id.toString)
+	// 						}else
+	// 							new NeedMoreGodhood(from.title)
+	// 					}
+	// 					case None =>
+	// 						new BadReport("linking from position that does not exist")
+	// 				}
+	// 			}else{
+	// 				new NeedMoreGodhood(realm.title)
+	// 			}
+	// 		}
+	// 		case None => new BadReport("no such realm")
+	// 	}
+	// }
+	
+	private def createIdentity(ident:Identity, op:JsObject):Report ={
+		val user = ident.user
+		val id = (op \ "name").asOpt[String] match {
+			case Some(name) =>
+				Identity.generateNew(user, name)
+			case None =>
+				Identity.generateNew(user)
+		}
+		new Shiny("id" -> id.id.toString, "name" -> id.name)
 	}
 	
 	private def remember(ident:Identity, op:JsObject):Report ={
@@ -208,7 +242,7 @@ object Application extends Controller {
 	private def deleteLink(ident:Identity, op:JsObject):Report ={
 		Global.getPosition(longFromJsString(op \ "srcWorldId")) match {
 			case Some(sw) =>{
-				if(ident manifests sw)
+				if((ident manifests sw) || sw.id == Global.freeNexus)
 					Global.getPosition(longFromJsString(op \ "dstWorldId")) match{
 						case Some(dw) =>{
 							sw getLinkTo dw match{
@@ -216,6 +250,7 @@ object Application extends Controller {
 									rel.delete
 								case None => Unit
 							}
+							sw.touch
 							shiny
 						}
 						case None => new BadReport("dst position does not exist")
@@ -227,12 +262,34 @@ object Application extends Controller {
 		}
 	}
 	
+	private def movePosition(ident:Identity, op:JsObject):Report ={
+		Global.getPosition(longFromJsString(op \ "posId")) match {
+			case Some(pos) =>{
+				if(ident manifests pos)
+					Global.getRealm(longFromJsString(op \ "newRealmId")) match{
+						case Some(newRealm) =>
+							if(ident manifests newRealm){
+								pos transfer newRealm
+								shiny
+							}else
+								new NeedMoreGodhood(newRealm.title)
+						case None =>
+							new BadReport("target realm does not exist")
+					}
+				else
+					new NeedMoreGodhood(pos.title)
+			}
+			case None =>
+				new BadReport("object position does not exist")
+		}
+	}
+	
 	private def createPosition(ident:Identity, op:JsObject):Report ={
 		Global.getRealm(longFromJsString(op \ "realmId")) match{
 			case Some(realm) =>{
 				if(ident manifests realm){
 					val npos = Global.instateNewPosition(realm.v)
-					new Shiny("posId", npos.id.toString)
+					new Shiny("posId" -> npos.id.toString)
 				}else{
 					new NeedMoreGodhood(realm.title)
 				}
@@ -282,7 +339,7 @@ object Application extends Controller {
 				case None =>{
 					val realm = Realm.create(realmn)
 					realm induct ident
-					new Shiny("realmId", realm.id.toString)
+					new Shiny("realmId" -> realm.id.toString)
 				}
 			}
 		}
@@ -293,11 +350,12 @@ object Application extends Controller {
 		Global.getPosition(id) match {
 			case Some(place) => {
 				if(ident manifests place){
+					place.touch
 					val seq = (op \ "properties").as[Seq[JsValue]]
 					if(seq.isEmpty)
 						shiny
 					else{
-						var ret:Report = null;
+						var ret:Report = null
 						for(o <- seq){
 							ret = (o \ "property").as[String] match {
 								case "illustration" => {
@@ -346,7 +404,10 @@ object Application extends Controller {
 				Global.getIdentity(longFromJsString(o \ "identity"))
 			} match {
 				case Some(ident) =>{
-					if(Global.transact{ Global.valid(ident.user, (o \ "authorizationKey").as[String]) }){
+					if(Global.transact{ Global.valid(
+							ident.user.id.asInstanceOf[Long],
+							longFromJsString(o \ "authorizationKey")
+					)}){
 						doTransactions(ident, o)
 					}else{
 						new BadReport("authorization key expired")
@@ -377,9 +438,7 @@ object Application extends Controller {
 						//send back user data and session key
 						JsObject(
 							"status" -> JsString("shiny") ::
-							"token" ->
-								JsString(Global.authorizationKey(user).toString) ::
-							"user" -> user.json ::
+							"user" -> user.json(Global.authorizationKey(user.id.asInstanceOf[Long])) ::
 						Nil)
 					})
 				}else{
@@ -392,4 +451,17 @@ object Application extends Controller {
 			})
 	}}
 	
+	def tokenLogin = Action(parse.json){ request => {
+		val o = request.body.as[JsObject]
+		transact{
+			val user =  User createOrGet (o \ "email").as[String]
+			val userid = user.id
+			val token = longFromJsString(o \ "authorizationKey")
+			if(Global.valid(userid, token)){
+				Ok(user.json(token))
+			}else{
+				NotAcceptable
+			}
+		}
+	}}
 }

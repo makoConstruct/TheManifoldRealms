@@ -2,29 +2,25 @@
 
 body{
 	z-index: -60;
-	background-color: rgb(255,255,255);
-	color:#020202;
-	font-family:'Lato', sans-serif;
+	font-family:'Open Sans', sans-serif;
 	font-size: 13px;
 	padding: 0px;
 	margin: 0px;
 }
+#themeSwitcher { padding-top: 6px }
 
-body > *{
-	z-index: 20;
-}
+body > *{  z-index: 20  }
 
 ::selection{background-color: #dadada;}
 ::-moz-selection{background-color: #dadada;}
 
-a { color:#040404; font-weight:700;     text-decoration:none; }
+a { font-weight:700;  text-decoration:none; }
+
 a.external::after {
 	.transition( all 230ms ease-in-out);
 	content:'⇸';
 	/*strongly considered '⤯', but it looks like an X, which does not work.*/
-	color:#d0d0d0;
 }
-a.external:hover::after {color:#000000}
 
 p{
 	margin:0; /*why does margin overlap its bounds? How is that useful?*/
@@ -34,11 +30,55 @@ p{
 #graff {
 	z-index: 5;
 	position: fixed;
-	color: #d0d0d0;
-	background-color: #ffffff;
 	left:0px; top:0px; right:0px;
 	width: 100%;
 	height: 100%;
+}
+
+@lightThemeBackground: rgb(250,250,250);
+
+body.lightTheme{
+	background-color: @lightThemeBackground;
+	color: rgb(2,2,2);
+	#graff { background-color: @lightThemeBackground }
+	#action { background-color: rgb(0,0,0);  color: rgb(184,214,185) }
+	.obscures { background-color: rgba(250,250,250,0.63) }
+	#linklist{ .linear-gradient-top(none,  rgba(250,250,250,0.63),0%,  rgba(250,250,250,0.24),100%) }
+	.tip { color: rgb(0,0,0); background-color: rgba(250,250,250,0.83) }
+	.controlSubscript{ color: rgb(153,153,153) }
+	#controls{ background-color: rgba(250,250,250,0.6) }
+	&.editMode #title:empty::after { color: rgb(181,181,181) }
+	.minorFont { color: rgb(197,197,197) }
+	:hover > .minorFont{ color:rgb(2,2,2) }
+	#localPantheon{ color:rgb(187,200,191) }
+	a{ color:rgb(0,0,0) }
+	a.external::after { color:rgb(208,208,208) }
+	a.external:hover::after { color: rgb(2,2,2) }
+	#loginimagesmall > path { fill:rgb(0,0,0) }
+	#spinner > path { fill:rgb(0,0,0) }
+	#ghosty > path { fill: #C3D1CD }
+}
+
+body:not(.lightTheme){
+	background-color: rgb(0,0,0);
+	color: rgb(230,230,230);
+	#graff { background-color: rgb(0,0,0) }
+	#action { background-color: rgb(10,13,10);  color: rgb(184,214,185) }
+	.obscures { background-color: rgba(0,0,0,0.63) }
+	#linklist{ .linear-gradient-top(none,  rgba(0,0,0,0.63),0%,  rgba(0,0,0,0.24),100%) }
+	.tip { color: rgb(255,255,255); background-color: rgba(0,0,0,0.83) }
+	.controlSubscript{ color: rgb(160,160,160) }
+	#controls{ background-color: rgba(0,0,0,0.6) }
+	&.editMode #title:empty::after { color: rgb(90,90,90) }
+	.minorFont { color: rgb(90,90,90) }
+	:hover > .minorFont{ color: rgb(230,230,230) }
+	#localPantheon{ color: rgb(78,90,96) }
+	a{ color:rgb(255,255,255) }
+	a.external::after { color: rgb(90,90,90) }
+	a.external:hover::after { color: rgb(230,230,230) }
+	#loginimagesmall > path { fill:rgb(230,230,230) }
+	#spinner > path { fill:rgb(230,230,230) }
+	#ghosty > path { fill: #585C5B }
 }
 
 .graffCanvas{
@@ -51,43 +91,12 @@ p{
 @-o-keyframes dally {0%{opacity: 0} 40%{opacity: 0} 100%{opacity: 1}}
 @keyframes dally {0%{opacity: 0} 40%{opacity: 0} 100%{opacity: 1}}
 
-#loginimage {
-	float:left;
-	width: 40px;
-	height: 31px;
-}
 #loginimagesmall {
 	float:left;
 	width: 22px;
 	height: 17px;
+	padding-right: 4px;
 }
-
-/*#godFaceContainer {
-	display: inline-block;
-	text-align: center;
-	vertical-align: bottom;
-	overflow: hidden;
-	width: 0px;
-	.transition( all 0.22s ease-out 0.3s);
-}
-#godFace {
-	position: relative;
-	display: inline;
-	height: 50px;
-	width: 50px;
-	opacity: 0;
-	.transition( all 0.3s ease-in);
-}
-body.editMode{
-	#godFaceContainer {
-		.transition( all 0.22s ease-out);
-		width: 50px;
-	}
-	#godFace {
-		.transition( all 0.3s ease-in 0.22s);
-		opacity: 1;
-	}
-}*/
 
 #topBar{
 	padding-top: 18px;
@@ -98,10 +107,8 @@ body.editMode{
 	font-size: 55px;
 	font-family:'Gafata', sans-serif;
 }
-#title:empty:after {
-	color: #b3b3b3;
-	font-variant: italic;
-	content: 'Enter Title';
+body.editMode #title:empty:after {
+	content: 'Title';
 }
 #triangle {
 	opacity: 0.13;
@@ -116,38 +123,27 @@ body.editMode{
 
 #ghosty {
 	position: fixed;
+	cursor: pointer;
 	z-index: 100;
 	left: 0px;
 	top: 0px;
+	opacity: 0;
+	.transition( all 0.2s ease-in-out);
+}
+.ghostlike {
 	height: 27px;
 	width: 27px;
 	padding: 6px;
-	opacity: 0;
-	.transition( all 0.2s ease-in-out);
 }
 
 body.indicatorsShown:not(.proDeployer) #ghosty {
 	.transition(all 6s ease-in-out);
-	opacity: 0.23;
+	opacity: 1;
 }
 #ghosty:hover, body.controlsDeployed #ghosty {
 	.transition(all 0.2s ease-in-out);
-	opacity: 0.23;
+	opacity: 1;
 }
-
-
-// #sideIndicater {
-// 	position: fixed;
-// 	pointer-events: none;
-// 	opacity: 0;
-// 	left: -16px;
-// 	.transition( all 0.26s ease-in-out);
-// }
-// body.indicatorsShown:not(.touchMode) #sideIndicater:not(.hidden){
-// 	left: 0px;
-// 	opacity: 1;
-// 	.transition( all 3.3s ease-in-out);
-// }
 
 #controls {
 	position:fixed;
@@ -157,7 +153,6 @@ body.indicatorsShown:not(.proDeployer) #ghosty {
 	left: 0px;
 	bottom: 0px;
 	width: 200px;
-	background-color: rgba(255,255,255,0.6);
 	.transition( all 0.2s ease-in-out);
 }
 body.controlsDeployed #controls {
@@ -174,7 +169,6 @@ body:not(.controlsDeployed) #controls {
 // }
 
 .controlSubscript {
-	color: #999999;
 	padding-top: 6px;
 	padding-left: 4px;
 	font-size: 12px;
@@ -207,7 +201,7 @@ body:not(.editMode) .editModeOnly {
 	display: none;}
 
 .unselected {
-	opacity: 0.8;
+	opacity: 0.67;
 }
 
 body:not(.editMode) .editVisible {
@@ -222,7 +216,6 @@ body:not(.editMode) .editVisible {
 .tip {
 	position: fixed;
 	z-index: 140;
-	color: #000000;
 	text-align: center;
 	pointer-events: none;
 	font-family: 'Gafata', sans-serif;
@@ -230,9 +223,8 @@ body:not(.editMode) .editVisible {
 	width: 178px;
 	border:6px;
 	border-radius: 3px;
-	background-color: rgba(255,255,255,0.65);
 	opacity: 0;
-	.transition( all 0.2s ease-in-out);
+	.transition( opacity 0.2s ease-in-out);
 }
 
 .tip.opaque {
@@ -247,14 +239,12 @@ body:not(.editMode) .editVisible {
 #action {
 	position: fixed;
 	display: inline-block;
-	background-color: #000000;
 	overflow: hidden;
 	z-index: 70;
 	bottom: 0px;
 	left: 0px;
 	right: 0px;
 	margin:0px;
-	color: #B8D6B9;
 	font-family:monospace;
 }
 
@@ -287,9 +277,10 @@ body:not(.editMode) .editVisible {
 	left:0px;
 }
 #cli {
-	padding:0px;
+	padding: 0px;
 	outline: none;
 	background: none;
+	color: inherit;
 	border: none;
 	margin: 0px;
 	-webkit-appearance: none;
@@ -300,7 +291,6 @@ body:not(.editMode) .editVisible {
 	position:relative;
 	left:0px;
 	top:0px;
-	color: #B8D6B9;
 	font-family:monospace;
 }
 
@@ -317,11 +307,7 @@ body:not(.editMode) .editVisible {
 }
 
 .minorFont {
-	color: #c5c5c5;
 	.transition( all 0.3s);
-}
-:hover > .minorFont{
-	color: #000000;
 }
 
 .listLinkText {
@@ -349,27 +335,6 @@ body.editMode .treversalLink>.listLinkTitle {
 	position: relative;
 	/*left: -21px;*/
 }
-
-/*#scanline {
-	position: absolute;
-	pointer-events:none;
-	opacity: 0;
-	left: -4%;
-	right: -4%;
-	top: 0%;
-	height: 4px;
-	padding-top: -2px;
-	background-color: rgb(255,200,0);
-}
-@-webkit-keyframes scanaway{
-	0%{top:0%; opacity:0;}
-	7%{top:0%; opacity:1;}
-	93%{top:100%; opacity:1;}
-	100%{top:100%; opacity:0;}
-}
-.editMode #scanline {
-	-webkit-animation: scanaway 0.5s ease-in-out 0.3s 1 normal none;
-}*/
 
 .easeinout {
 	.transition( all 0.3s ease-in-out);
@@ -427,18 +392,14 @@ body.editMode #pageContent{
 	78% {opacity: 0.29}
 	100% {opacity: 1}}
 
-.obscures {
-	background-color: rgba(255,255,255,0.63);
-}
-
 
 
 #linklist {
-	.linear-gradient-top(none,  rgba(255,255,255,0.63),0%,  rgba(255,255,255,0.24),100%);
 	text-align: left;
 }
 
 #spinner {
+	display: none;
 	position: absolute;
 	pointer-events: none;
 	width: 60px;
@@ -448,7 +409,7 @@ body.editMode #pageContent{
 }
 #spinner.showing {
 	opacity: 1;
-	.animation(spinning 7s linear 0s infinite normal forwards);
+	.animation(spinning 7s linear 0.3s infinite normal forwards);
 }
 
 @-webkit-keyframes spinning {from{-webkit-transform:rotate(0deg);} to{-webkit-transform:rotate(360deg);}}
@@ -524,7 +485,7 @@ body.editMode #pageContent{
 
 @godopHeight: 31px;
 
-.hideySituationH(50px, editMode, godFace, godFaceContainer);
+.hideySituationV(24px, editMode, godFace, godFaceContainer);
 
 // .hideySituationV(@godopHeight, editMode, godOpsContainer, godOpsHidey);
 //god ops presently disabled
@@ -534,6 +495,12 @@ body.editMode #pageContent{
 
 .hideySituationV(@localPantheonHeight, editMode, localPantheon, localPantheonHidey);
 
+#godFace {
+	display: inline-block;
+}
+#godFaceContainer {
+	text-align: center;
+}
 
 #godOpsContainer {
 	text-align: center;
@@ -572,6 +539,8 @@ body.starred #starOp {
 	.godProfile {
 		display: inline-block;
 		@spacing: 30px;
+		font-size: @localPantheonHeight;
+		font-weight: 700;
 		padding-left: @spacing;
 		padding-right: @spacing;
 		padding-bottom: 0px;

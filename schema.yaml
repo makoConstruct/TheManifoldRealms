@@ -3,6 +3,8 @@ nodeTypes:
 - label: Position
   about: these are places you see and navigate.
   properties:
+  - name: lastchanged
+    about: time since last modification
   - name: illustration
     about: the text explaining the place. First thing the user sees.
   - name: id
@@ -53,17 +55,23 @@ Realms < Positions
 Positions x Positions
 }
 
+GET /data/<position id>
+GET /surrounding/<position id> //gets the position data surrounding <position id>
 
 {json api
+{ login /tokenLogin
+email <>
+authorizationKey <>
+}
 
-
-{ transactions
+{ transactions /action
+  //"note, they're not really done in individual transactions. That wouldn't make sense. Consistency is maintained by the server, nothing the clients do should be able to leave the DB in a state that needs to be rolled back"
 identity <Long, the identity number>
 authorizationKey <Long>
 ops [
   opname create
   realmId <id>
-
+  
   opname destroy
   posId <>
 
@@ -93,6 +101,10 @@ ops [
   opname forget
   posId <>
 
+  opname transfer
+  posId <>
+  newRealmId <>
+
   opname link
   srcWorldId <>
   dstWorldId <>
@@ -101,10 +113,13 @@ ops [
   opname idname
   idId <>
   newName <>
+  
+  opname createidentity
+  ? name <>
 
   opname unlink
-  srcWorldId
-  dstWorldId
+  srcWorldId <position id>
+  dstWorldId <position id>
 
   opname induct
   realmId <>
@@ -121,8 +136,8 @@ ops [
   illustration <>
   realm <id>
   paths [
-  id
-  title
+  id <>
+  title <>
   relationship
     <>
     null
@@ -132,18 +147,21 @@ ops [
   title
   ]
   
+  
   status shiny
     //successful logins:
-    token <>
-    user {
     email
+    token
     id
     identities[
     name
     id
     realms [<string>]
     ]
-    }
+    
+    //identity creation
+    id
+    name
     
     //successful position creation
     posId <>

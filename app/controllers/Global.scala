@@ -12,11 +12,16 @@ import org.neo4j._
 import org.neo4j.graphdb._
 import org.neo4j.tooling.GlobalGraphOperations
 import play.api.libs.json._
+import java.lang.System.currentTimeMillis
 
 class Position(in:Node) extends Ordered[Position]{ //in must have a realm attached to it
 	val v = in
 	def realm =
 		new Realm(v.getSingleRelationship(IN_REALM, Direction.OUTGOING).getEndNode)
+	def transfer(newRealm:Realm) ={
+		v.getSingleRelationship(IN_REALM, Direction.OUTGOING).delete
+		v.createRelationshipTo(newRealm.v, IN_REALM)
+	}
 	def compare(other:Position) =
 		id compare other.id
 	def title =
@@ -28,6 +33,11 @@ class Position(in:Node) extends Ordered[Position]{ //in must have a realm attach
 			r.delete
 		v.delete
 	}
+	def timestamp:Long =
+		v.getProperty("serverTimestamp").asInstanceOf[Long]
+	def touch{
+		v.setProperty("serverTimestamp", currentTimeMillis)
+	}
 	def illustration(in:String) =
 		v.setProperty("illustration", in)
 	def illustration =
@@ -38,56 +48,58 @@ class Position(in:Node) extends Ordered[Position]{ //in must have a realm attach
 		v.getRelationships(Direction.INCOMING, TO)
 			.asScala.iterator
 	def refJson =
-		JsObject(
-			"title" -> JsString(v.getProperty("title").asInstanceOf[String]) ::
-			"id" -> JsString(v.getProperty("id").asInstanceOf[Long].toString) ::
-		Nil)
+		Json.obj(
+			"title" -> JsString(title),
+			"id" -> JsString(id.toString) )
 	def delvings:Iterator[Relationship] =
 		v.getRelationships(Direction.OUTGOING, TO)
 			.asScala.iterator
 	final def outLinkArray(rs: Iterator[Relationship]) =
 		JsArray(rs.toArray.map((r:Relationship) =>{
 			val onode = r.getEndNode
-			JsObject(
-				"id" -> JsString(onode.getProperty("id").asInstanceOf[Long].toString) ::
-				"title" -> JsString(onode.getProperty("title").asInstanceOf[String]) ::
+			Json.obj(
+				"id" -> JsString(onode.getProperty("id").asInstanceOf[Long].toString),
+				"title" -> (
+					if(onode.hasProperty("title"))
+						JsString(onode.getProperty("title").asInstanceOf[String])
+					else
+						JsNull ),
 				"relationship" -> (
 					if(r.hasProperty("relationship"))
 						JsString(r.getProperty("relationship").asInstanceOf[String])
 					else
-						JsNull) ::
-			Nil)}))
+						JsNull ) )}))
 	final def inLinkArray(rs: Iterator[Relationship]) =
 		JsArray(rs.toArray.map((r:Relationship) =>{
 			val onode = r.getStartNode
-			JsObject(
+			Json.obj(
 				"id" -> JsString(
-					onode.getProperty("id").asInstanceOf[Long].toString) ::
-				"title" -> JsString(
-					onode.getProperty("title").asInstanceOf[String]) ::
-			Nil)}))
-	def js:JsObject ={
-		JsObject(
-			"title" -> JsString(title) ::
-			"id" -> JsString(id.toString) ::
-			"realm" -> JsString(realm.id.toString) ::
-			"illustration" -> JsString(illustration) ::
-			"paths" -> outLinkArray(delvings) ::
-			"backlinks" -> inLinkArray(backlinks) ::
-		Nil)
+					onode.getProperty("id").asInstanceOf[Long].toString),
+				"title" -> (
+					if(onode.hasProperty("title"))
+						JsString(onode.getProperty("title").asInstanceOf[String])
+					else
+						JsNull ) ) } ))
+	def json:JsObject ={
+		Json.obj(
+			"title" -> JsString(title),
+			"id" -> JsString(id.toString),
+			"serverTimestamp" -> JsString(timestamp.toString),
+			"realm" -> JsString(realm.id.toString),
+			"illustration" -> JsString(illustration),
+			"paths" -> outLinkArray(delvings),
+			"backlinks" -> inLinkArray(backlinks) )
 	}
 	def proximalJs = /*the json of here and the surrounding area*/
-		JsArray(Array(js) ++ delvings.map(r => new Position(r.getEndNode)).toArray.sorted.map(_.js))
+		JsArray(Array(json) ++ delvings.map(r => new Position(r.getEndNode)).toArray.sorted.map(_.json))
 	def sameRealm(other:Position) =
 		realm equals other.realm
 	def link(other:Position) ={
 		v.createRelationshipTo(other.v, TO)
-		other.v.createRelationshipTo(v, TO)
 	}
 	def link(forwardIllustration:String)(other:Position) ={
 		v.createRelationshipTo(other.v, TO)
 			.setProperty("relationship", forwardIllustration)
-		other.v.createRelationshipTo(v, TO)
 	}
 	def link(forwardIllustration:String, backIllustration:String)(other:Position) ={
 		v.createRelationshipTo(other.v, TO)
@@ -101,12 +113,6 @@ class Position(in:Node) extends Ordered[Position]{ //in must have a realm attach
 				return Some(r)
 		}
 		None
-	}
-	def delve(other:Position) =
-		v.createRelationshipTo(other.v, TO)
-	def delve(illustration:String)(other:Position) ={
-		v.createRelationshipTo(other.v, TO)
-			.setProperty("relationship", illustration)
 	}
 }
 
@@ -131,8 +137,6 @@ class User(node:Node){
 		v.getProperty("id").asInstanceOf[Long]
 	def email:String = 
 		v.getProperty("email").asInstanceOf[String]
-	def identify(i:Identity) =
-		v.createRelationshipTo(i.v, IDENTIFIES)
 	def identities:Iterator[Identity] =
 		v.getRelationships(Direction.OUTGOING, IDENTIFIES)
 			.asScala.iterator.map(r => new Identity(r.getEndNode))
@@ -146,10 +150,11 @@ class User(node:Node){
 	def rememberry:Iterator[Position] =
 		v.getRelationships(Direction.OUTGOING, REMEMBERS)
 			.asScala.iterator.map(r => new Position(r.getEndNode))
-	def json:JsObject ={
+	def json(token: Long):JsObject ={
 		JsObject(
 			"email" -> JsString(email) ::
 			"id" -> JsNumber(id) ::
+			"token" -> JsString(token.toString) ::
 			"identities" -> JsArray(identities.toArray.sorted.map(_.json)) ::
 			"rememberry" -> JsArray(rememberry.toArray.sorted.map(_.refJson)) ::
 		Nil)
@@ -181,20 +186,18 @@ class Realm(node:Node) extends Ordered[Realm]{
 		}
 		false
 	}
-	def induct(id: Identity):Unit ={
-		if(!hasFigure(id))
-			id.v.createRelationshipTo(v, MANIFESTS)
+	def induct(ident: Identity):Unit ={
+		if(id != Global.freeRealm && !hasFigure(ident))
+			ident.v.createRelationshipTo(v, MANIFESTS)
 	}
 	def pantheon:Iterable[Identity] =
 		v.getRelationships(Direction.INCOMING, MANIFESTS).asScala
 			.map((r:Relationship) => new Identity(r.getStartNode))
-	def json:JsObject ={
-		JsObject(
-			"id" -> JsString(id.toString) ::
-			"title" -> JsString(title) ::
-			"pantheon" -> JsArray((pantheon.map((g:Identity) => g.json)).toSeq) ::
-		Nil)
-	}
+	def json =
+		Json.obj(
+			"id" -> JsString(id.toString),
+			"title" -> JsString(title),
+			"pantheon" -> JsArray((pantheon.map((g:Identity) => g.json)).toSeq) )
 }
 
 object Identity{
@@ -226,15 +229,14 @@ class Identity(node:Node) extends Ordered[Identity]{
 	def realmIds:Iterator[Long] =
 		realms.iterator.map(_.getProperty("id").asInstanceOf[Long])
 	def json:JsObject =
-		JsObject(
-			"name" -> JsString(name) ::
-			"id" -> JsString(id.toString) ::
-			"realms" -> JsArray(realmIds.toArray.sorted.map(l => JsString(l.toString))) ::
-		Nil)
+		Json.obj(
+			"name" -> JsString(name),
+			"id" -> JsString(id.toString),
+			"realms" -> JsArray(realmIds.toArray.sorted.map(l => JsString(l.toString))) )
 	def manifests(r:Realm):Boolean =
-		r.hasFigure(this)
+		r.id == Global.freeRealm /*the seventh realm is Free, The Babel*/ || r.hasFigure(this)
 	def manifests(p:Position):Boolean =
-		p.realm.hasFigure(this)
+		manifests(p.realm)
 }
 
 
@@ -259,11 +261,13 @@ object Global extends GlobalSettings{
 		node.setProperty("title", title)
 		node.setProperty("id", takeCount("newestPositionId"))
 		node.setProperty("illustration", illustration)
+		node.setProperty("serverTimestamp", currentTimeMillis)
 		new Position(node)
 	}
 	def instateNewPosition(realm:Node):Position = {
 		val node = dbs createNode positionLabel
 		node.setProperty("id", takeCount("newestPositionId"))
+		node.setProperty("serverTimestamp", currentTimeMillis)
 		node.createRelationshipTo(realm, IN_REALM)
 		new Position(node)
 	}
@@ -290,24 +294,28 @@ object Global extends GlobalSettings{
 	final val placeNameRegexString = "[a-zA-Z0-9]+"
 	final val placeName = placeNameRegexString.r
 	var globalBean:Node = null
+	val freeNexus:Long = 94l
+	val freeRealm:Long = 7l
 	private var defaultPosition: Position = null
 	private var voidPosition: Position = null
 	private var dbs: GraphDatabaseService = null
 	var voidJson:JsObject = null;
 	def db = dbs
 	var hasher:SaltFlatLoper = null
-	def currentTimeSegment = java.lang.System.currentTimeMillis/(1000*60*60*24*2)
-	final val maxAge = 2 //so, basically, a key will be accepted if it's within 3(valid() is inclined to go one extra) segments[6 days] of the current time
-	def authorizationKey(user:User, time:Long):Long =
-		Global.hasher(431861l*user.id + time) //TODO, use a real large prime
-	def authorizationKey(user:User):Long =
-		authorizationKey(user, currentTimeSegment)
+	def currentTimeSegment = currentTimeMillis/(1000*60*60*24)
+	final val maxAge = 5 //so, basically, a key will be accepted if it's within 6(valid() is inclined to go one extra) segments[6 days] of the current time
+	def authorizationKey(id:Long, time:Long):Long =
+		Global.hasher(431861l*id + time) //TODO, use a real large prime
+	def authorizationKey(id:Long):Long =
+		authorizationKey(id, currentTimeSegment)
+	def authorizationKey(u:User):Long =
+		authorizationKey(u.id.asInstanceOf[Long])
 	def valid(user:User, token:String):Boolean =
-		valid(user, java.lang.Long.parseLong(token))
-	def valid(user:User, token:Long):Boolean ={
+		valid(user.id.asInstanceOf[Long], java.lang.Long.parseLong(token))
+	def valid(userid:Long, token:Long):Boolean ={
 		val currentTime = currentTimeSegment
 		def matchesOlder(i:Int):Boolean =
-			if(token == authorizationKey(user, currentTimeSegment - i))
+			if(token == authorizationKey(userid, currentTime - i))
 				true
 			else if(i > maxAge)
 				false
@@ -315,11 +323,7 @@ object Global extends GlobalSettings{
 				matchesOlder(i+1)
 		matchesOlder(0)
 	}
-	def htmlFor(pos:Position) :Html = {
-		transact{
-			views.html.grandMoment(pos.proximalJs, pos.id.toString) }}
-	def defaultHtml :Html = htmlFor(defaultPosition)
-	def nullHtml :Html = htmlFor(voidPosition)
+	def defaultHtml :Html = views.html.grandMoment()
 	def lookUpNode(label:Label, feild:String, value:Any):Option[Node] = {
 		val resultsiter =
 			dbs.findNodesByLabelAndProperty(label, feild, value)
@@ -363,21 +367,7 @@ object Global extends GlobalSettings{
 	override def onStart(app: Application){
 		dbs = new factory.GraphDatabaseFactory() newEmbeddedDatabase dbLocation
 		hasher = new SaltFlatLoper(secret)
-		
 		domain = Play.application.configuration.getString("application.domain").get
-		
-		// var fil = new java.io.File("/home/mako/grandMoment/db/store_lock")
-		// try{
-		// 	fil.getParentFile.mkdirs
-		// 	try{
-		// 		var fol = new java.io.File("/home/mako/grandMoment/db/./store_lock")
-		// 		fol.getParentFile.mkdirs
-		// 	}catch{
-		// 		case e: java.io.IOException => println("its that")
-		// 	}
-		// }catch{
-		// 	case e: java.io.IOException => println("idk why this breaks")
-		// }
 		
 		if( transact{ /*checks whether the db has been initialized*/
 			GlobalGraphOperations.at(dbs).getAllNodesWithLabel(gsLabel).iterator.hasNext
@@ -408,6 +398,7 @@ object Global extends GlobalSettings{
 				nullPosition.setProperty("title", "Nowhere")
 				nullPosition.setProperty("id", 0l)
 				nullPosition.setProperty("illustration", "<p>There is nothing here.</p>")
+				nullPosition.setProperty("serverTimestamp", currentTimeMillis)
 				nullPosition.createRelationshipTo(void, IN_REALM);
 				
 				val city = dbs createNode realmLabel
@@ -417,6 +408,7 @@ object Global extends GlobalSettings{
 				manCity.setProperty("title", "The Crook")
 				manCity.setProperty("id", 1l)
 				manCity.setProperty("illustration", "<p>The city hums to the resonant frequency of the interleaved waxed dreams of the manifold exuberant gods who slumber in every nook.</p>")
+				manCity.setProperty("serverTimestamp", currentTimeMillis)
 				manCity.createRelationshipTo(city, IN_REALM);
 				
 				val aleph = dbs createNode userLabel
@@ -438,7 +430,7 @@ object Global extends GlobalSettings{
 			voidJson =
 				new Realm(dbs.findNodesByLabelAndProperty(realmLabel, "id", 0l).iterator.next).json
 			defaultPosition = 
-				new Position(dbs.findNodesByLabelAndProperty(positionLabel, "id", 1l).iterator.next)
+				new Position(dbs.findNodesByLabelAndProperty(positionLabel, "id", 47l).iterator.next)
 		}
 	}
 	override def onStop(app: Application){

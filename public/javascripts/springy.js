@@ -345,6 +345,8 @@
 		this.nodePoints = {}; // keep track of points associated with nodes
 		this.edgeSprings = {}; // keep track of springs associated with edges
 	};
+	
+	Layout.ForceDirected.prototype.minEnergy = 0.06;
 
 	Layout.ForceDirected.prototype.point = function(node) {
 		if (!(node.id in this.nodePoints)) {
@@ -525,7 +527,7 @@
 			}
 
 			// stop simulation when energy of the system goes below a threshold
-			if (t._stop || t.totalEnergy() < 0.01) {
+			if (t._stop || t.totalEnergy() < this.minEnergy) {
 				t._started = false;
 				if (onRenderStop !== undefined) { onRenderStop(); }
 			} else {

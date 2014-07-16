@@ -1,16 +1,6 @@
-//the project that made me swear off javascript.
+//The project that led me to swear to fight the javascript menace in every quarter it has not already won.
 //~mako yass
 
-// identity storage stuff
-
-// Storage.prototype.setObject = function(key, value) {
-//     this.setItem(key, JSON.stringify(value));
-// }
-
-// Storage.prototype.getObject = function(key) {
-//     var value = this.getItem(key);
-//     return value && JSON.parse(value);
-// }
 "use strict";
 
 //it's shim time. The time of procession of shame for javascript. Dip your heads.
@@ -25,6 +15,10 @@ function elementLocation(el){
 	}
 }
 
+// function elementLocation(el){
+// 	return {x: el.clientLeft, y:el.clientTop}
+// }
+
 function pointWithinElement(el, point){
 	var elor = elementLocation(el);
 	return (point.x >= elor.x && point.x < elor.x + el.offsetWidth && point.y >= elor.y && point.y < elor.y + el.offsetHeight)
@@ -33,6 +27,15 @@ function pointWithinElement(el, point){
 function clearEl(el){
 	while(el.firstChild)
 		el.removeChild(el.firstChild);
+}
+
+Storage.prototype.setObject = function(key, value){
+	this.setItem(key, JSON.stringify(value));
+}
+
+Storage.prototype.getObject = function(key, defaultValue){
+	var value = this.getItem(key);
+	return value? JSON.parse(value) : defaultValue;
 }
 
 var requestAnimFrame =
@@ -63,28 +66,31 @@ String.prototype.hashCode = function(){
 
 //shim time is over, now real code begin
 
-//globals:
 var graff;
 var editor;
 var graph;
 var navigationBackstack = []; //because for some reason history wont let us access data about that. They probably said "security" and then stopped thinking about it.
 var previousPosition;
 var standardAppTitle = "The Manifold Realms";
-var nodeQueueLimit = 190;
+var lightTheme = true;
+var nodeQueueLimit = 47;
 var nodeQueueCount = 0;
 var nodeQueueEye = 0; //nodeQueue[nodeQueueEye] is front.
 var nodeQueue = new List(); //list of graph nodes
+var themeChanges = new List(); //list of functions that update elements when the theme changes
 var autoCompletions = [
 	'back',
 	'edit'
 ];
 var loadingMode = false;
 var currentPosition = null;
-var treadedNodeColor = '#bbc8bf';
-var untreadedNodeColor = '#dbdbdb';
-var unreadableNodeColor = '#ffffff';
-var selectedNodeColor = '#92a899';
-var userIconBackdrop = 'rgb(99,126,118)';
+var ld = function(l,d){return function(){return lightTheme?l:d}};
+var backgroundColor = ld('rgb(250,250,250)','rgb(0,0,0)');
+var foregroundColor = ld('rgb(10,10,10)','rgb(240,240,240)');
+var treadedNodeColor = ld('rgb(187,200,191)','rgb(78,90,96)');
+var selectedNodeColor = ld('rgb(142,168,153)','rgb(96,139,142)');
+var untreadedNodeColor = ld('rgb(219,219,219)','rgb(76,76,76)');
+var unreadableNodeColor = ld('rgb(250,250,250)','rgb(0,0,0)');
 var communistBear = 87;
 var userData = null;
 /*
@@ -101,17 +107,16 @@ identities are like
 		'9325984273' ]
 */
 
-var authToken = null;
 var commandBarExpanded = false;
 var controlsShown = false;
 var trayDeploysOnMouse = true;
-var identified = false;
 var trayItemActivationMethod = null;
 var selectedIdTag = null;
 var selectedId = null;
 var isEditMode = false;
 var treversalLink = null;
 var redundanceMessage = {status:'shiny', detail:'redundant'};
+var personaLoggedIn = false;
 
 function easeOut(p){return p*p;}
 function easeIn(p){return Math.sqrt(p);}
@@ -129,19 +134,20 @@ function Graff(container){ //takes style from container and fills it with graff.
 	this.nodeUnhoverListeners = new DataSource();
 	this.pipWidth = 8;
 	this.container = container;
-	var dis = this;
+	var self = this;
 	
 	this.graph = new Springy.Graph();
 	
-	window.addEventListener('keydown', function(ev){dis.keyDown(ev);});
-	window.addEventListener('keyup', function(ev){dis.keyUp(ev);});
+	// this.keym = new KeyMonitor();
+	// this.keym.then('a', function(ev){
+	// 
+	// });
+	window.addEventListener('keydown', function(ev){self.keyDown(ev)});
+	window.addEventListener('keyup', function(ev){self.keyUp(ev)});
 	
 	this.graph.addGraphListener(this);
 	this.layout = new Springy.Layout.ForceDirected(this.graph, 310,420,0.43);
 	this.mousePosition = new Springy.Vector(0,0);
-	
-	var containerComputedStyle = window.getComputedStyle(container, null);
-	this.backgroundStyle = containerComputedStyle.getPropertyValue('background-color') || '#000000';
 	
 	this.animationsRunning = new List();
 	
@@ -178,8 +184,7 @@ keyC: false,
 tilt: 1,
 relocationDurationMilliseconds: 700,
 extrusionEffecting: false,
-highlightColor:'#000000',
-highlightRgbStr:'0,0,0',
+highlightRgbStr: function(){return lightTheme?'0,0,0':'255,255,255'},
 editMode: false,
 setEditMode: function(whether){
 	if(this.editMode ^ whether){
@@ -298,6 +303,11 @@ pageChange: function(){
 	newCanvas.height = this.container.clientHeight;
 	newCanvas.style.position = 'fixed';
 	newCanvas.classList.add('graffCanvas');
+	var self = this;
+	newCanvas.themeChangeCallback = function(light){
+		self.startUpdatingBoard();
+	};
+	newCanvas.classList.add('updateOnThemeChange');
 	newCanvas.id = 'gameView';
 	if(this.canvas)
 		this.container.replaceChild(newCanvas, this.canvas);
@@ -336,13 +346,12 @@ render: function(timestamp){
 	// 	this.drawEdge(snp, this.mousePosition);
 	// }
 	this.layout.eachNode(function(node, point){
-		var c = node.data.grandMomentData.id? node.data.color : this.backgroundStyle;
-		var pt = dis.toScreen(point.p);
-		dis.drawNode(pt, c);
+		dis.drawNode(dis.toScreen(point.p), node.data.grandMomentData.color());
 	});
 	this.layout.eachNode(function(node, point){
 		var p = node.data.grandMomentData.lighting;
-		if(node.data.grandMomentData != currentPosition && p && p > 0){
+		var o = node.data.grandMomentData.lightingOpacity;
+		if(node.data.grandMomentData != currentPosition && p && p > 0 && o && o > 0){
 			var minThickness = 0.2;
 			var thickness = easeIn(minThickness + (1 - minThickness)*p);
 			var originNodePt = dis.toScreen(
@@ -357,14 +366,14 @@ render: function(timestamp){
 			dis.cancon.arc(loc.x, loc.y, innerRad, angle - arcSpread, angle + arcSpread, true);
 			dis.cancon.arc(loc.x, loc.y, outerRad, angle + arcSpread, angle - arcSpread, false);
 			dis.cancon.closePath();
-			dis.cancon.fillStyle = 'rgba('+ dis.highlightRgbStr +','+ thickness +')';
+			dis.cancon.fillStyle = 'rgba('+ dis.highlightRgbStr() +','+ o +')';
 			dis.cancon.fill();
 		}
 	});
 },
 
 drawBackground: function(){
-	this.cancon.fillStyle = this.backgroundStyle;
+	this.cancon.fillStyle = backgroundColor();
 	this.cancon.fillRect(0,0, this.canvas.width,this.canvas.height);
 },
 drawNode: function(pt, color){
@@ -383,29 +392,38 @@ assignCanvasContext: function(cancon){
 	this.cancon.canvas.addEventListener('mousemove', function(ev){dis.mouseMove(ev);});
 },
 keyDown: function(kev){
-	if(this.editMode){
-	// 	switch(kev.keyCode){    TODO needs careful focus handling. The ideal vision would be to focus wherever the mouse goes.
-	// 		case 83: /* s */
-	// 			if(!this.keyS){
-	// 				this.keyS = true;
-	// 				this.extrusionEffecting = true;
-	// 				this.checkExtrusion();
-	// 			}
-	// 		break;
-	// 		case 68: /* d */
-	// 			if(!this.keyD){
-	// 				this.keyD = true;
-	// 				this.deleteAction();
-	// 			}
-	// 		break;
-	// 		case 67:
-	// 			if(!this.keyC){
-	// 				this.keyC = true;
-	// 				if(this.editMode)
-		// 				this.createAction();
-	// 			}
-	// 		break;
-	// 	}
+	// var graffFocal = function(code, f){
+	// 	this.keym.then(code, function(ev){
+	// 		if(this.editMode && !hasEditableText(document.activeElement))
+	// 			f(ev);
+	// 	});
+	// };
+	// var explicitBindings = function(
+	if(this.editMode && !hasEditableText(document.activeElement)){
+		if(!(kev.shiftKey || kev.ctrlKey || kev.altKey)){
+			switch(kev.keyCode){
+				case 83:
+					if(!this.keyS){
+						this.keyS = true;
+						this.extrusionEffecting = true;
+						this.checkExtrusion();
+					}
+				break;
+				case 68:
+					if(!this.keyD){
+						this.keyD = true;
+						// this.deleteAction(); //too dangerous to have on ones' fingertips at all times. Leave it to the 'destroy' command.
+					}
+				break;
+				case 67:
+					if(!this.keyC){
+						this.keyC = true;
+						if(this.editMode)
+							this.createAction();
+					}
+				break;
+			}
+		}
 	}
 },
 keyUp: function(kev){
@@ -450,9 +468,9 @@ fromScreen: function(screenP){
 },
 clickDown: function(ev){
 	this.clickedDown = true;
-	this.mousePosition.x = ev.x;
-	this.mousePosition.y = ev.y;
-	var nearest = this.layout.nearest(this.fromScreen(ev));
+	this.mousePosition.x = ev.clientX;
+	this.mousePosition.y = ev.clientY;
+	var nearest = this.layout.nearest(this.fromScreen(this.mousePosition));
 	if(nearest.node && nearest.distance <= 1){
 		if(this.editMode){
 			this.beginExtrusionFrom(nearest.node);
@@ -476,23 +494,28 @@ finishExtruding: function(){
 	if(this.extrusionEffecting && this.anchorNode){
 		var cloc = this.fromScreen(this.mousePosition);
 		var nearnode = this.layout.nearest(cloc);
-		if(nearnode.node && nearnode.distance <= 1){
+		if(nearnode.node && nearnode.node != this.anchorNode && nearnode.distance <= 1){
 			var opos = this.anchorNode.data.grandMomentData;
 			var fpos = nearnode.node.data.grandMomentData;
 			var con = opos.linked(fpos);
-			if(con)
+			if(con){
 				opos.unforgeLink(fpos);
-			else
+			}else{
 				opos.forgeLink(fpos);
+			}
+			this.startUpdatingBoard();
 		}else{
 			Position.createIncomplete(this.mousePosition, this.anchorNode.data.grandMomentData);
 		}
+		this.clickedDown = false;
 	}
 	this.cancelExtruding();
 },
 deleteAction: function(){
 	var nearn = this.layout.nearest(this.fromScreen(this.mousePosition));
-	if(nearn.distance <= 1) this.graph.removeNode(nearn.node);
+	if(nearn.distance <= 1){
+		nearn.node.data.grandMomentData.destroyRightly();
+	}
 },
 checkExtrusion: function(){
 	var cloc = this.fromScreen(this.mousePosition);
@@ -516,35 +539,33 @@ beginExtrusionFrom: function(node){ //node optional
 	this.checkExtrusion();
 },
 mouseMove: function(ev){
+	var shiftx = ev.clientX - this.mousePosition.x;
+	var shifty = ev.clientY - this.mousePosition.y;
+	this.mousePosition.x = ev.clientX;
+	this.mousePosition.y = ev.clientY;
 	if(this.clickedDown){
 		if(this.extrusionEffecting){
 			this.checkExtrusion();
 		}else{
-			var shiftx = ev.x - this.mousePosition.x;
-			var shifty = ev.y - this.mousePosition.y;
 			if(shiftx != 0 || shifty != 0){
 				this.focusNodeX -= shiftx;
 				this.focusNodeY -= shifty;
-				this.mousePosition.x = ev.x;
-				this.mousePosition.y = ev.y;
 				this.startUpdatingBoard();
 			}
 		}
 	}
-	var p = this.fromScreen(ev);
+	var p = this.fromScreen(this.mousePosition);
 	var nearest = this.layout.nearest(p);
 	if(nearest.distance > 1) nearest.node = null;
 	if(nearest.node != this.hoveredNode){
 		this.nodeUnhoverListeners.publish();
 		this.hoveredNode = nearest.node;
-		if(nearest.node && nearest.node.data.grandMomentData != currentPosition){
+		if(nearest.node && (graphCentral || nearest.node.data.grandMomentData != currentPosition)){
 			this.nodeHoverListeners.publish({
 				p: this.locationOf(nearest.node),
 				text: nearest.node.data.grandMomentData.title});
 		}
 	}
-	this.mousePosition.x = ev.x;
-	this.mousePosition.y = ev.y;
 },
 locationOf: function(node){
 	return this.toScreen(this.layout.point(node).p);
@@ -554,27 +575,28 @@ doubleClick: function(ev){
 		this.createAction();
 },
 clickUp: function(ev){
-	this.clickedDown = false;
-	if(this.lastClickTime + this.doubleClickDuration > ev.timeStamp)
-		this.doubleClick();
-	else if(this.editMode){
-		var nearnode = this.layout.nearest(this.fromScreen(ev));
-		if(nearnode.node){
-			if(nearnode.distance >= 1){
-				if(nearnode.node != this.anchorNode)
+	if(this.clickedDown){
+		this.clickedDown = false;
+		if(this.lastClickTime + this.doubleClickDuration > ev.timeStamp)
+			this.doubleClick();
+		else if(this.editMode){
+			var nearnode = this.layout.nearest(this.fromScreen(this.mousePosition));
+			if(nearnode.node){
+				if(nearnode.distance >= 1){
 					this.finishExtruding();
-			}else if(this.focusNode != nearnode.node){
-				this.selectNode(nearnode.node);
+				}else if(this.focusNode != nearnode.node){
+					this.selectNode(nearnode.node);
+				}
 			}
+			this.cancelExtruding();
 		}
-		this.cancelExtruding();
+		this.lastClickTime = ev.timeStamp;
 	}
-	this.lastClickTime = ev.timeStamp;
 },
 drawEdge: function(node1, node2){
-	var c1 = node1.data.color;
+	var c1 = node1.data.grandMomentData.color();
 	var p1 = this.toScreen(this.layout.point(node1).p);
-	var c2 = node2.data.color;
+	var c2 = node2.data.grandMomentData.color();
 	var p2 = this.toScreen(this.layout.point(node2).p);
 	var style;
 	if(c1 == c2){
@@ -649,6 +671,11 @@ drawEdge: function(node1, node2){
 	//so digraph
 }
 };
+
+var resIdEx = /^[0-9]*$/;
+function validResId(str){
+	return !!resIdEx.exec(str);
+}
 
 function Realm(){
 	this.pantheon = new List(function(a,b){return a.id < b.id});
@@ -728,24 +755,32 @@ Realm.prototype.updatePantheonView = function(){
 	var lineup = document.getElementById('localPantheon');
 	clearEl(lineup);
 	var canspan = lineup.offsetHeight;
-	this.pantheon.forEach(function(c){
-		var can = iconFor(c.v, canspan, treadedNodeColor);
-		can.classList.add('godProfile');
+	var bindToolTipToEl = function(el, text){
 		var tipOn = new DataSource();
 		var tipOff = new DataSource();
-		can.addEventListener('mouseover', function(){
-			var canloc = elementLocation(can);
-			canloc.x += can.offsetWidth/2;
-			canloc.y += can.offsetHeight+8;
-			tipOn.publish({p:canloc, text:c.v.name});
+		el.addEventListener('mouseover', function(){
+			var canloc = elementLocation(el);
+			canloc.x += el.offsetWidth/2;
+			canloc.y += el.offsetHeight;
+			tipOn.publish({p:canloc, text:text});
 		});
-		can.addEventListener('mouseout', function(){tipOff.publish()});
+		el.addEventListener('mouseout', function(){tipOff.publish()});
 		bindToolTip(tipOn, tipOff);
-		lineup.appendChild(can);
-	});
-};
-Realm.prototype.tread = function(){
-	this.updatePantheonView();
+	};
+	if(this.id == '7' || currentPosition.id == '94'){ //special case for The Babel and the room before it
+		var theAll = document.createElement('div');
+		theAll.classList.add('godProfile');
+		theAll.textContent = '∀';
+		bindToolTipToEl(theAll, 'the all');
+		lineup.appendChild(theAll);
+	}else{
+		this.pantheon.forEach(function(c){
+			var can = iconFor(c.v, canspan, treadedNodeColor);
+			can.classList.add('godProfile');
+			bindToolTipToEl(can, c.v.name);
+			lineup.appendChild(can);
+		});
+	}
 };
 
 
@@ -770,19 +805,30 @@ Position.instateOrGet = function(posid, title){
 Position.freshId = 0;
 Position.createIncomplete = function(screenPosition, positionLinkedFrom, realm){ //Always cognisses the edge. all vars optional
 	var v = new Position();
-	v.realm = realm || (positionLinkedFrom && positionLinkedFrom.realm) || currentPosition.realm;
+	v.realm =
+		realm ||
+		(positionLinkedFrom &&
+			(positionLinkedFrom.id == '94' ?
+				Realm.getOrInstate('7') :
+				positionLinkedFrom.realm)) || 
+		currentPosition.realm;
 	v.isReadable = true;
 	v.engraph(screenPosition && graff.fromScreen(screenPosition));
 	positionLinkedFrom && positionLinkedFrom.link(v).setCognissLinkTo(v, true);
 	return v;
 };
-Position.instateOrUpdate = function(jsonData){
+
+Position.instateOrUpdate = function(jsonData){ //returns an awaited resolving the completed positionData
 	var prec = Position.instateOrGet(jsonData.id, jsonData.title);
 	prec.isReadable = true;
 	prec.illustration = jsonData.illustration;
-	prec.realm = jsonData.realm;
 	var countObject = {};
 	var changed = false;
+	prec.timestamp = prec.serverTimestamp = jsonData.serverTimestamp;
+	//start resolving the realm [usually instant]
+	if(jsonData.realm.constructor != String) throw 'the fuck';
+	var gettingRealm = Realm.getFuture(jsonData.realm);
+	//links
 	jsonData.paths.forEach(function(p){
 		countObject[p.id] = p;
 	});
@@ -818,7 +864,12 @@ Position.instateOrUpdate = function(jsonData){
 	for(var c in backLinkCountObject){
 		Position.instateOrGet(c, backLinkCountObject[c].title).link(prec);
 	}
-	return prec;
+	return gettingRealm.map(
+		function(r){
+			prec.realm = r;
+			if(prec == currentPosition)
+				slideInPosition(prec);
+			return prec});
 }
 Position.cache = {};
 Position.getp = function(id){
@@ -826,6 +877,8 @@ Position.getp = function(id){
 }
 Position.prototype.id = null;
 Position.prototype.title = null;
+Position.prototype.timestamp = '';
+Position.prototype.serverTimestamp = '';
 Position.prototype.links = null;
 Position.prototype.realm = null;
 Position.prototype.starred = false;
@@ -843,40 +896,49 @@ Connection.prototype.fNode = null;
 Connection.prototype.graphEdge = null;
 function PathLink(positionData, relationship){
 	this.title = positionData.title;
-	this.relationship = relationship || ('<p>'+positionData.title+'</p>');
+	this.relationship = relationship;
 	this.positionData = positionData;
 }
 PathLink.prototype.relationship = null;
 PathLink.prototype.altered = false; //set to false when synched with the server
 PathLink.prototype.element = null; //the element associated with the link. Remember to annull when the position is unfocussed.
+PathLink.prototype.reserveAlterations = function(){
+	if(this.element){
+		if(this.altered){
+			if(textualEffectivelyEmpty(this.element)){
+				this.relationship = null;
+			}else{
+				this.relationship = this.element.innerHTML;
+			}
+		}
+	}
+};
 PathLink.prototype.positionData = null;
 function Connection(n1, n2){
-	if(n1.id < n2.id){ //hrm. often, the positions' IDs will be undefined initially. I guess it doesn't really matter.
-		this.oNode = n1;
-		this.fNode = n2;
-	}else{
-		this.oNode = n2;
-		this.fNode = n1;
-	}
+	this.oNode = n1;
+	this.fNode = n2;
 }
 Connection.prototype.link = function(target, relationship){ //will update the graph if needed
 	var pl = new PathLink(target, relationship);
 	if(target == this.oNode){
 		if(this.foForth){ //merge
 			if(relationship) this.foForth.relationship = relationship;
-			return;
+			return this.foForth;
 		}else{
 			this.foForth = pl;
 		}
-	}else{
+	}else if(target == this.fNode){
 		if(this.ofForth){ //merge
 			if(relationship) this.ofForth.relationship = relationship;
-			return;
+			return this.ofForth;
 		}else{
 			this.ofForth = pl;
 		}
+	}else{
+		throw new Error("can't link to a target not included in the relationship");
 	}
 	this.considerEngraphing();
+	return pl;
 };
 Connection.prototype.backLinkToCognissedAndBothGraphed = function(node){
 	return (this.oNode.nodeQueueLNode && this.fNode.nodeQueueLNode) &&
@@ -920,7 +982,9 @@ Connection.prototype.other = function(node){
 			this.oNode : null);}
 Connection.prototype.considerDegraphing = function(){
 	if(
-		this.graphEdge && !(this.ofBackCognissed || this.foBackCognissed)
+		this.graphEdge &&
+		(!(this.ofBackCognissed || this.foBackCognissed) ||
+			!this.oNode.nodeQueueLNode || !this.fNode.nodeQueueLNode)
 	){
 		this.degraph();
 	}
@@ -987,8 +1051,19 @@ Position.prototype.forgeLink = function(othernode){ //saves the link with the se
 		if(this.online() && othernode.online())
 			doTransactions(linkOp(this, othernode)).then(
 				null,
-				function(note){pushLine('could not save new link to server. ' + (note||''))});
+				function(note){pushLine('could not save new link to server. ' + (note||''), true)});
 	}
+};
+Position.prototype.setRealm = function(newRealm){
+	var tran = doTransactions(reassignRealmOp(this, newRealm));
+	var self = this;
+	tran.then(function(res){
+		self.realm = newRealm;
+		if(self == currentPosition){
+			newRealm.updatePantheonView();
+		}
+	});
+	return tran;
 };
 Position.prototype.link = function(othernode, text){ //text optional. returns the connection.
 	var precedent = this.links.findFirstMatch(
@@ -998,9 +1073,20 @@ Position.prototype.link = function(othernode, text){ //text optional. returns th
 		con = new Connection(this, othernode);
 		this.links.pushFront(con);
 		othernode.links.pushFront(con);
-	}else
+	}else{
 		con = precedent.v;
-	con.link(othernode, text);
+	}
+	var pl = con.link(othernode, text);
+	if(this == currentPosition){
+		if(pl.element){
+			pl.element.innerHTML = text;
+		}else{
+			var list = document.getElementById('linklist');
+			list.insertBefore(forwardLinkEl(currentPosition, con), list.firstChild);
+			editor.deactivate();
+			editor.activate(); //includes the new link, as it has class editable
+		}
+	}
 	return con;
 };
 Position.prototype.destroy = function(){ //removes from local
@@ -1013,10 +1099,8 @@ Position.prototype.destroy = function(){ //removes from local
 	this.degraph();
 	if(this.id)
 		delete Position.cache[this.id];
-	if(previousPosition){
-		tryToNavigateToPosition(previousPosition, true);
-	}else{
-		tryToNavigateToPosition("0", true);
+	if(this == currentPosition){
+		history.back();
 	}
 };
 Position.prototype.destroyRightly = function(){ //attempts to remove absolutely
@@ -1043,10 +1127,65 @@ Position.prototype.cogniss = function(){
 	this.engraphThisAndCognissedNeighbors();
 };
 Position.prototype.isComplete = function(){return this.title.length > 0;};
-Position.prototype.tread = function(){
+Position.prototype.color = function(){
+	return this == currentPosition ?
+		selectedNodeColor():
+		this.isTreaded?
+			treadedNodeColor() :
+			backgroundColor();
+};
+Position.prototype.controlledBy = function(ident){
+	return this.id == '94' || this.realm.id == '7' ||
+		!!this.realm.pantheon.findFirstMatch(
+			function(c){return c.id == ident.id});
+};
+Position.prototype.tread = function(){ //handles the change in the model as we transfer to the new node
+	previousPosition = currentPosition;
+	currentPosition = this;
 	this.isTreaded = true;
 	this.cogniss();
 	graff.setFocusNode(this.nodeQueueLNode.v);
+	if(!previousPosition || previousPosition.id == '94' || this.id == '94' || previousPosition.realm != this.realm){
+		updateIdenticon();
+		this.realm.updatePantheonView();
+	}
+	if(previousPosition){
+		//annull references to link elements and store state from editions.
+		previousPosition.links.forEach(function(c){
+			var outgo = c.v.linkFrom(previousPosition);
+			outgo && outgo.reserveAlterations();
+		});
+		previousPosition.title = document.getElementById('title').textContent;
+		previousPosition.illustration = document.getElementById('illustration').innerHTML;
+	}
+}
+Position.prototype.update = function(){
+	if(!this.online()) return;
+	var self = this;
+	fetchPosition(this.id).then(function(r){
+		if(r.serverTimestamp > self.serverTimestamp){
+			if(self.isModified){
+				//drop it and complain
+				pushLine("another god has altered this position since you started. Be sure you keep out of each others' way.", true);
+			}else{
+				Position.instateOrUpdate(r);
+			}
+		}
+	});
+};
+Position.prototype.discardChanges = function(){
+	var aw = new Awaited();
+	if(!this.online()){
+		aw.ashame("there is no state to revert to, this position was never saved.");
+	}else{
+		this.setModified(false);
+		var fetch = fetchPosition(this.id);
+		fetch.then(function(r){
+			Position.instateOrUpdate(r);
+		});
+		fetch.chain(aw);
+	}
+	return aw;
 }
 Position.prototype.getLinkTo = function(other){
 	return this.links.findFirstMatch(
@@ -1067,7 +1206,7 @@ Position.prototype.unforgeLink = function(other){ //returns the awaited transact
 	if(this.linked(other)){
 		this.unlink(other);
 		aw = doTransactions(unlinkOp(this, other));
-		aw.then(null, function(note){pushLine("can't sever the link. " + note)});
+		aw.then(null, function(note){pushLine("can't sever the link. " + note, true)});
 	}else{
 		aw = new Awaited();
 		aw.publish(redundanceMessage);
@@ -1080,95 +1219,111 @@ Position.prototype.online = function(){
 Position.prototype.setLinkChanged = function(connection){
 	this.setModified(true);
 	this.linksChanged = true;
-	var plin = connection.linkFrom(this);
-	plin.altered = true;
+	connection.linkFrom(this).altered = true;
 }
-Position.prototype.createNodeOnServer = function(){ //returns an awaited that is fed the id of the new entity, though you wont need it, cause it'll then be logged in the position concerned.
+Position.prototype.reserveLinkAlterations = function(){
+	var self = this;
+	this.links.forEach(function(c){
+		var ln = c.v.linkFrom(self);
+		if(ln) ln.reserveAlterations();
+	});
+};
+Position.prototype.createNodeOnServer = function(){ //By the time the awaited is satisfied, this position will have its id, and will be marked as being online. This operation includes the recording of links to and from saved nodes.
 	var aw = new Awaited();
 	if(this.online()){
 		aw.publish(this.id);
 	}else{
-		var dis = this;
+		this.reserveLinkAlterations();
+		var self = this;
 		doTransactions(creationOp(this)).then(function(r){
-			dis.id = r.posId;
-			history.replaceState(dis.id, dis.title||standardAppTitle, dis.id);
-			Position.cache[dis.id] = dis;
+			self.id = r.posId;
+			if(currentPosition == self)
+				history.replaceState(self.id, self.title||standardAppTitle, self.id);
+			Position.cache[self.id] = self;
 			graff.startUpdatingBoard();
-			//check to save unlogged links
-			dis.links.forEach(function(c){
-				var other = c.v.other(dis);
+			//check to save formerly unlogged links
+			var linkTransactions = [];
+			self.links.forEach(function(c){
+				var other = c.v.other(self);
 				if(other.online()){
-					if(c.v.linkFrom(dis))
-						doTransactions(linkOp(dis, other)).then(
-							null,
-							function(note){
-								pushLine('Could not save links from newly created node. '+note)});
-					if(c.v.linkFrom(other))
-						doTransactions(linkOp(other, dis)).then(
-							null,
-							function(note){
-								pushLine('Could not save links to newly created node. '+note)})
+					var plin = c.v.linkFrom(self);
+					if(plin)
+						linkTransactions.push(linkOp(self, other, plin.relationship));
+					var oplin = c.v.linkFrom(other);
+					if(oplin)
+						linkTransactions.push(linkOp(other, self, oplin.relationship));
 				}
 			});
-			aw.publish(r.posId);
+			if(linkTransactions.length)
+				doTransactions(linkTransactions).chain(aw);
+			else
+				aw.publish();
 		}, function(note){
 			aw.ashame(note);
 		});
 	}
 	return aw;
 };
-Position.prototype.saveStateToServer = function(){ //returns the moment of save
-	if(this.isModified){
-		var ops = [];
-		if(this.illustrationChanged){
-			ops.push(
-				alterIllustrationEdition(
-					document.getElementById('illustration').innerHTML));
-		}
-		if(this.titleChanged){
-			ops.push(
-				alterTitleEdition(
-					document.getElementById('title').textContent));
-		}
-		if(this.linksChanged){
-			var dis = this;
-			this.links.forEach(function(c){
-				var fn = c.v.other(dis);
-				var plin = c.v.linkFrom(dis);
-				if(fn.online() && plin.altered)
-					ops.push(
-						alterLink(fn.id, plin.element.innerHTML));
-			});
-		}
-		var aw = new Awaited();
-		doTransactionListReportingToAwaited(aw, [editionOp(this, ops)]);
-		var dis = this;
-		aw.then(function(){
-			dis.setModified(false);
-		}, function(note){
-			pushLine("Saving position state failed. " + note, true);
-		});
-		return aw;
-	}else{
-		var aw = new Awaited();
-		aw.publish(redundanceMessage);
-		return aw;
-	}
-}
-Position.prototype.save = function(){ //returns moment of save, includes creation ops if necessary
-	var dis = this;
+Position.prototype.save = function(){ //returns the moment of save. Assumes the creation ops have gone through and this node is online. Does not assume other creation ops have gone through, 
 	var aw = new Awaited();
-	var saving = function(){
-		var saved = dis.saveStateToServer();
-		saved.then(null, function(note){
-			pushLine(note, true);
-		});
-		saved.chain(aw);
-	};
-	if(!dis.id)
-		dis.createNodeOnServer(null,function(){pushLine(note)}).then(saving);
-	else
-		saving();
+	var tcreation = this.createNodeOnServer();
+	tcreation.burden(aw);
+	var self = this;
+	tcreation.then(function(){
+		if(self.isModified){
+			var transactions = [];
+			var ops = [];
+			var creations = [];
+			var beingCreated = [];
+			if(self.illustrationChanged){
+				ops.push(
+					alterIllustrationEdition(
+						document.getElementById('illustration').innerHTML));
+			}
+			if(self.titleChanged){
+				ops.push(
+					alterTitleEdition(
+						document.getElementById('title').textContent));
+			}
+			if(self.linksChanged){
+				self.links.forEach(function(c){
+					var fn = c.v.other(self);
+					var plin = c.v.linkFrom(self);
+					if(plin && plin.altered){
+						plin.reserveAlterations();
+						if(!fn.online()){
+							creations.push(fn.createNodeOnServer()); //not ideal. Sending off each request individually instead of getting all the location IDs in one batch. A better architecture isn't exactly springing to mind right now though.
+							beingCreated.push(c.v);
+						}else{
+							ops.push( alterLinkOp(fn, plin.element.innerHTML));
+						}
+						plin.altered = false;
+					}
+				});
+			}
+			var creatings = awaitAll(creations);
+			creatings.burden(aw);
+			creatings.then(function(){
+				beingCreated.forEach(function(c){
+					var el = c.linkFrom(self).element;
+					transactions.push(linkOp(
+						self,
+						c.other(self),
+						textualEffectivelyEmpty(el)?
+							null:
+							el.innerHTML))});
+				transactions.push(editionOp(self, ops));
+				doTransactionListReportingToAwaited(aw, transactions);
+			});
+			aw.then(function(){
+				self.setModified(false);
+			}, function(note){
+				pushLine("Saving position state failed. " + note, true);
+			});
+		}else{
+			aw.publish(redundanceMessage);
+		}
+	});
 	return aw;
 };
 Position.prototype.setStarred = function(whether){ //returns server starring
@@ -1209,13 +1364,16 @@ Position.prototype.setStarred = function(whether){ //returns server starring
 Position.prototype.setModified = function(whether){
 	if(this.isModified ^ whether){
 		if(whether){
-			document.body.classList.add('modified');
-			var dis = this;
-			document.getElementById('changeSender').onmousedown = function(ev){
-				dis.save();
-			};
+			if(this == currentPosition){
+				document.body.classList.add('modified');
+				var dis = this;
+				document.getElementById('changeSender').onmousedown = function(ev){
+					outputTransaction(currentPosition.save());
+				};
+			}
 		}else{
-			document.body.classList.remove('modified');
+			if(this == currentPosition)
+				document.body.classList.remove('modified');
 			this.illustrationChanged = false;
 			this.titleChanged = false;
 			this.linksChanged = false;
@@ -1230,47 +1388,39 @@ Position.prototype.setModified = function(whether){
 	}
 };
 Position.prototype.engraph = function(pos){ //pos is optional
-	if(this.nodeQueueLNode) return;
-	if(nodeQueueCount < nodeQueueLimit){
+	if(this.nodeQueueLNode){
+		nodeQueue.removeNode(this.nodeQueueLNode);
+		nodeQueue.insertFront(this.nodeQueueLNode);
+	}else{
 		++nodeQueueCount;
-	}else{
-		var incumbent = nodeQueue.back();
-		nodeQueue.removeNode(incumbent);
-		incumbent.v.data.grandMomentData.degraph();
+		if(nodeQueueCount > nodeQueueLimit)
+			nodeQueue.back().v.data.grandMomentData.degraph();
+		var startingpos = undefined;
+		if(pos){
+			startingpos = pos;
+		}else{
+			var dis = this;
+			this.links.findFirstMatch(function(con){ //findFirstMatch is used here to allow breaking/continuing from the foreach.
+				var nd = con.other(dis);
+				if(!nd.nodeQueueLNode) return false;
+				var np = graff.layout.point(nd.nodeQueueLNode.v).p;
+				graff.currentNewNodeAngle += graff.angleIncrement;
+				var initialRad = 1.9;
+				startingpos = np.add(new Springy.Vector(
+					initialRad*Math.cos(graff.currentNewNodeAngle),
+					initialRad*Math.sin(graff.currentNewNodeAngle)));
+				return true;
+			});
+		}
+		var node = graph.newNode({
+			grandMomentData: this,
+			mass: 0.43,
+			initialPos: startingpos });
+		this.nodeQueueLNode = nodeQueue.pushFront(node);
+		setTimeout(function(){
+			graff.layout.point(node).m = 1;
+		}, 1200);
 	}
-	var startingpos = undefined;
-	if(pos){
-		startingpos = pos;
-	}else{
-		var dis = this;
-		this.links.findFirstMatch(function(con){ //findFirstMatch is used here to allow breaking/continuing from the foreach.
-			var nd = con.other(dis);
-			if(!nd.nodeQueueLNode) return false;
-			var np = graff.layout.point(nd.nodeQueueLNode.v).p;
-			graff.currentNewNodeAngle += graff.angleIncrement;
-			var initialRad = 1.9;
-			startingpos = np.add(new Springy.Vector(
-				initialRad*Math.cos(graff.currentNewNodeAngle),
-				initialRad*Math.sin(graff.currentNewNodeAngle)));
-			return true;
-		});
-	}
-	var node = graph.newNode({
-		grandMomentData: this,
-		mass: 0.43,
-		initialPos: startingpos,
-		color:
-			((this == currentPosition)?
-				selectedNodeColor:
-				(this.isReadable?
-					(this.isTreaded?
-						treadedNodeColor:
-						untreadedNodeColor):
-					unreadableNodeColor))});
-	this.nodeQueueLNode = nodeQueue.pushFront(node);
-	setTimeout(function(){
-		graff.layout.point(node).m = 1;
-	}, 1200);
 	var dis = this;
 	this.links.forEach(function(c){
 		c.v.considerEngraphing();
@@ -1282,7 +1432,6 @@ Position.prototype.engraphThisAndCognissedNeighbors = function(){
 	this.links.forEach(function(om){
 		if(om.v.backLinkToCognissed(dis)){
 			om.v.other(dis).engraph();
-			om.v.considerEngraphing();
 		}
 	});
 };
@@ -1328,16 +1477,20 @@ function createAndNavToRealm(realmName){
 	return tr;
 }
 
+function hasEditableText(element){
+	return element.isContentEditable || element.tagName == 'input' || element.tagName == 'INPUT';
+}
+
 function doTransactionListReportingToAwaited(aw, tlist){
-	if(!selectedId || !authToken){
+	if(!selectedId || !userData){
 		aw.ashame('cannot construct operation specification, not identified');
 	}
 	postJsonGetJson('/action', {
 		identity: selectedId.id,
-		authorizationKey: authToken,
+		authorizationKey: userData.token,
 		ops: tlist.slice()
 	}).then(function(res){
-		if(res.status == 'authorization key expired'){
+		if(res.status == 'authorization key expired. Please log in again.'){
 			considerLoggingIn.then(
 				function(){doTransactionListReportingToAwaited(aw, tlist);},
 				function(note){aw.ashame(note);});
@@ -1354,7 +1507,10 @@ function doTransactionListReportingToAwaited(aw, tlist){
 }
 function doTransactions(){
 	var aw = new Awaited();
-	doTransactionListReportingToAwaited(aw, [].slice.call(arguments) /*RRROOAAAAARRRRRRR*/);
+	var argList =
+		arguments[0].constructor == Array ? arguments[0] :
+		[].slice.call(arguments) /*RRROOAAAAARRRRRRR*/;
+	doTransactionListReportingToAwaited(aw, argList);
 	return aw;
 }
 
@@ -1377,10 +1533,10 @@ function alterTitleEdition(newTitle){
 		val: newTitle
 	};
 }
-function alterLink(dstId, newIllustration){
+function alterLinkOp(dst, newIllustration){
 	return {
 		property: 'link',
-		dst: dstId,
+		dst: dst.id,
 		illustration: newIllustration
 	};
 }
@@ -1414,6 +1570,14 @@ function linkOp(src, dst, illustration){ //illustration optional
 	};
 	if(illustration)
 		o.illustration = illustration;
+	return o;
+}
+
+function createIdentityOp(name){ //name optional
+	var o = {
+		opname: "createidentity",
+	};
+	if(name) o.name = name;
 	return o;
 }
 
@@ -1455,39 +1619,153 @@ function unstarOp(pos){
 	};
 }
 
+function reassignRealmOp(pos, realm){
+	return {
+		opname: "transfer",
+		posId: pos.id,
+		newRealmId: realm.id
+	};
+}
+
+function textualEffectivelyEmpty(el){
+	// function recurse(el, condition){
+	// 	if(el.children){
+	// 		for(var i=0; i<el.children.length; ++i){
+	// 			if(!recurse(el.children[i], condition))
+	// 				return false;
+	// 		}
+	// 	}else{
+	// 		return condition(el);
+	// 	}
+	// }
+	// return recurse(el, function(el){
+		return el.textContent.length==0;
+	// });
+}
+
 var filterAbbreviatedPosIdFromResource = /\/(-?\d+)/;
 
-function slideInPosition(positionNode){ //positionNode must be engraphed and readable
-	previousPosition = currentPosition;
-	currentPosition = positionNode;
-	if(!previousPosition || currentPosition.realm != previousPosition.realm){
-		currentPosition.realm.tread();
-	}
-	var title = document.getElementById('title');
-	var star = document.getElementById('star');
-	var illustration = document.getElementById('illustration');
-	if(previousPosition){
-		if(previousPosition.nodeQueueLNode)
-			previousPosition.nodeQueueLNode.v.data.color = treadedNodeColor;
-		//annull references to link elements and store state from editions.
-		previousPosition.links.forEach(function(c){
-			var fl = c.v.linkFrom(previousPosition);
-			if(fl && fl.element){
-				fl.relationship = fl.element.innerHTML;
-				fl.element = null;
-			}
+function bindHovers(el, pos){
+	function startIndicate(){
+		if(pos.nodeLightAnimation)
+			pos.nodeLightAnimation.stop();
+		if(pos.nodeFadeAnimation)
+			pos.nodeFadeAnimation.stop();
+		var currentLighting = pos.lighting || 0;
+		pos.nodeLightAnimation = graff.startAnimation(function(time){
+			pos.lighting = currentLighting + (1 - currentLighting)*time;
+		}, 90);
+		pos.nodeFadeAnimation = graff.startAnimation(function(progress){
+			pos.lightingOpacity = 1 - Math.pow(progress, 2);
+		}, 5300);
+	};
+	function retractIndicate(){
+		if(pos.nodeLightAnimation)
+			pos.nodeLightAnimation.stop();
+		if(pos.nodeFadeAnimation)
+			pos.nodeFadeAnimation.stop();
+		var currentLighting = pos.lighting || 0;
+		pos.nodeLightAnimation = graff.startAnimation(function(time){
+			pos.lighting = currentLighting - currentLighting*time;
+		}, 90);
+	};
+	el.addEventListener('mouseover', startIndicate);
+	el.addEventListener('mouseout', retractIndicate);
+	el.addEventListener('mousedown', retractIndicate);
+}
+function bindDivToPosition(div, arrow, pos){
+	div.addEventListener('mousedown', function(ev){
+		if(!isEditMode)
+			tryToNavigateToPosition(pos);
+	});
+	if(arrow)
+		arrow.addEventListener('mousedown', function(ev){
+			if(isEditMode)
+				tryToNavigateToPosition(pos);
 		});
-		previousPosition.title = title.textContent;
-		previousPosition.illustration = illustration.innerHTML;
+	bindHovers(div, pos);
+}
+function bindAToPosition(a, pos){
+	a.addEventListener('click', function(ev){
+		tryToNavigateToPosition(pos);
+		ev.preventDefault();
+	});
+	bindHovers(a, pos);
+}
+function forwardLinkEl(pos, rel){
+	var onode = rel.other(pos);
+	var flink = rel.linkFrom(pos);
+	var el = document.createElement('div');
+	el.classList.add('listLink');
+	el.style.position = 'relative';
+	var text = document.createElement('div');
+	text.classList.add('editable');
+	text.addEventListener('input', function(){
+		pos.setLinkChanged(rel);
+	});
+	text.classList.add('listLinkText');
+	text.innerHTML =
+		(flink && flink.relationship) || (onode.title? '<p>'+onode.title+'</p>' :
+		(onode.online()? '<p>#'+onode.id+'</p>' : '<p><br></p>'));
+	flink.element = text;
+	var arrow = document.createElement('div');
+	arrow.classList.add('minorFont');
+	arrow.classList.add('listLinkArrow');
+	// arrow.textContent = '❯❯'; //the kerning. There is none.
+	arrow.textContent = '➜';
+	bindDivToPosition(el, arrow, onode);
+	el.appendChild(arrow);
+	el.appendChild(text);
+	return el;
+}
+function treversalLinkEl(pos, rel){
+	var onode = rel.other(pos);
+	var flink = rel.linkFrom(pos);
+	var el = document.createElement('div');
+	el.classList.add('listLink');
+	el.classList.add('treversalLink');
+	el.style.position = 'relative';
+	var text = document.createElement('div');
+	text.classList.add('editable');
+	text.addEventListener('input', function(){
+		pos.setLinkChanged(rel);
+	});
+	text.classList.add('listLinkText');
+	text.innerHTML =
+		(flink && flink.relationship) || (onode.title? '<p>'+onode.title+'</p>' :
+		(onode.online()? '<p>#'+onode.id+'</p>' : '<p><br></p>'));
+	flink.element = text;
+	var titlet = document.createElement('div');
+	titlet.classList.add('listLinkTitle');
+	titlet.innerHTML =
+		(onode.title? '<p>'+onode.title+'</p>' : (flink && flink.relationship)) ||
+		(onode.online()? '<p>#'+onode.id+'</p>' : '<p><br></p>');
+	var arrow = document.createElement('div');
+	arrow.classList.add('minorFont');
+	arrow.classList.add('listLinkArrow');
+	// arrow.textContent = '❮❮';
+	arrow.textContent = '↩';
+	bindDivToPosition(el, arrow, onode);
+	el.appendChild(arrow);
+	el.appendChild(titlet);
+	el.appendChild(text);
+	return el;
+}
+
+function slideInPosition(positionNode){ //positionNode must be engraphed and readable
+	var title = document.getElementById('title');
+	var illustration = document.getElementById('illustration');
+	if(positionNode.id == '92' /*IE, the shifting wall, title:Free*/){
+		setTimeout(function(){document.body.classList.add('indicatorsShown')}, 1000);
 	}
 	treversalLink = null;
-	positionNode.nodeQueueLNode.v.data.color = selectedNodeColor;
 	var titleFlow = document.getElementById('titleFlow');
 	var pageContent = document.getElementById('pageContent');
 	pageContent.classList.remove('easein');
 	pageContent.classList.remove('easeinout');
 	pageContent.style.left = '0px';
-	document.body.scrollTop = 0;
+	if(!graphCentral)
+		document.body.scrollTop = 0;
 	title.textContent = positionNode.title;
 	document.title = positionNode.title;
 	illustration.innerHTML = positionNode.illustration||""; //illustration is now html instead of markdown. It's sanitized on the server, and considering you're already trusting html the server gave you, I see no benifit to sanitizing it here.
@@ -1502,103 +1780,7 @@ function slideInPosition(positionNode){ //positionNode must be engraphed and rea
 	var list = document.getElementById('linklist');
 	while(list.children.length)
 		list.removeChild(list.firstChild);
-	var bindHovers = function(el, pos){
-		var startIndicate = function(){
-			if(pos.nodeLightAnimation)
-				pos.nodeLightAnimation.stop();
-			var currentLighting = pos.lighting || 0;
-			pos.nodeLightAnimation = graff.startAnimation(function(time){
-				pos.lighting = currentLighting + (1 - currentLighting)*time;
-			}, 90);
-		};
-		var retractIndicate = function(){
-			if(pos.nodeLightAnimation)
-				pos.nodeLightAnimation.stop();
-			var currentLighting = pos.lighting || 0;
-			pos.nodeLightAnimation = graff.startAnimation(function(time){
-				pos.lighting = currentLighting - currentLighting*time;
-			}, 90);
-		};
-		el.addEventListener('mouseover', startIndicate);
-		el.addEventListener('mouseout', retractIndicate);
-		el.addEventListener('mousedown', retractIndicate);
-	}
-	var bindDivToPosition = function(div, arrow, pos){
-		div.addEventListener('mousedown', function(ev){
-			if(!isEditMode)
-				tryToNavigateToPosition(pos);
-		});
-		if(arrow)
-			arrow.addEventListener('mousedown', function(ev){
-				if(isEditMode)
-					tryToNavigateToPosition(pos);
-			});
-		bindHovers(div, pos);
-	};
-	var bindAToPosition = function(a, pos){
-		a.addEventListener('click', function(ev){
-			tryToNavigateToPosition(pos);
-			ev.preventDefault();
-		});
-		bindHovers(a, pos);
-	};
-	var forwardLinkFromRel = function(rel){
-		var onode = rel.other(positionNode);
-		var flink = rel.linkFrom(positionNode);
-		var el = document.createElement('div');
-		el.classList.add('listLink');
-		el.style.position = 'relative';
-		var text = document.createElement('div');
-		text.classList.add('editable');
-		text.addEventListener('input', function(){
-			positionNode.setLinkChanged(rel);
-		});
-		text.classList.add('listLinkText');
-		text.innerHTML =
-			flink.relationship || onode.title ||
-			(onode.online()? '#'+onode.id : 'New position');
-		flink.element = text;
-		var arrow = document.createElement('div');
-		arrow.classList.add('minorFont');
-		arrow.classList.add('listLinkArrow');
-		arrow.textContent = '➜';
-		bindDivToPosition(el, arrow, onode);
-		el.appendChild(arrow);
-		el.appendChild(text);
-		return el;
-	}
-	var treversalLinkFromRel = function(rel){
-		var onode = rel.other(positionNode);
-		var flink = rel.linkFrom(positionNode);
-		var el = document.createElement('div');
-		el.classList.add('listLink');
-		el.classList.add('treversalLink');
-		el.style.position = 'relative';
-		var text = document.createElement('div');
-		text.classList.add('editable');
-		text.addEventListener('input', function(){
-			positionNode.setLinkChanged(rel);
-		});
-		text.classList.add('listLinkText');
-		text.innerHTML =
-			flink.relationship || '<p>'+onode.title+'</p>' ||
-			(onode.online()? '<p>#'+onode.id+'</p>' : '<em>unnamed position</em>');
-		flink.element = text;
-		var titlet = document.createElement('div');
-		titlet.classList.add('listLinkTitle');
-		titlet.innerHTML =
-			'<p>'+onode.title+'</p>' || flink.relationship ||
-			(onode.online()? '<p>#'+onode.id+'</p>' : '<em>unnamed position</em>');;
-		var arrow = document.createElement('div');
-		arrow.classList.add('minorFont');
-		arrow.classList.add('listLinkArrow');
-		arrow.textContent = '↩';
-		bindDivToPosition(el, arrow, onode);
-		el.appendChild(arrow);
-		el.appendChild(titlet);
-		el.appendChild(text);
-		return el;
-	}
+	
 	var treversal = null;
 	positionNode.links.forEach(function(p){
 		var rel = p.v;
@@ -1608,14 +1790,14 @@ function slideInPosition(positionNode){ //positionNode must be engraphed and rea
 			if( previousPosition && onode == previousPosition ){
 				treversal = rel; //handled separately, after the rest.
 			}else{
-				list.appendChild(forwardLinkFromRel(rel));
+				list.appendChild(forwardLinkEl(positionNode, rel));
 			}
 		}
 	});
 	//now add the backlink
 	if(treversal){
-		// "〈〈 " "⟪" "＜＜" here are some nice alternative back arrows.
-		var el = treversalLinkFromRel(treversal);
+		// "〈〈 " "⟪" "＜＜" "❯❯" here are some nice alternative arrows.
+		var el = treversalLinkEl(positionNode, treversal);
 		treversalLink = treversal;
 		list.appendChild(el);
 	}
@@ -1661,6 +1843,26 @@ function slideInPosition(positionNode){ //positionNode must be engraphed and rea
 	}, 1); //because it doesn't seem to instate the value we assign above right away =______=
 }
 
+function coinRealm(name){ //returns awaited[realm]
+	var aw = Realm.createNew(name);
+	aw.then(function(realm){
+		setEditMode(true);
+		selectedId.realms.push(realm);
+		tryToNavigateToPosition(Position.createIncomplete(null, null, realm));
+	});
+	return aw;
+}
+
+function createIdentity(name){ //name optional. Returns awaited[identity]
+	var creation = doTransactions(createIdentityOp(name));
+	creation.then(function(res){
+		var newid = {id:res.id, name:res.name, realms:[]};
+		userData.identities.pushBack(newid);
+		document.getElementById('identities').appendChild(identityEl(newid));
+	});
+	return creation;
+}
+
 function startMoving(goingLeft){
 	var title = document.getElementById('titleFlow');
 	title.style.opacity = 0;
@@ -1674,130 +1876,25 @@ function startMoving(goingLeft){
 	return awaitTime(300);
 }
 
-function loggedIn(whether){
-	if(identified ^ whether){
-		var controls = document.getElementById('controls');
-		if(whether){ //then assumes userData
-			if(!userData.identities.isEmpty()){
-				var idlist = document.getElementById('identities');
-				userData.identities.forEach(function(idc){
-					var id = idc.v;
-					var ide = document.createElement('div');
-					ide.appendChild(iconFor(id, 18));
-					ide.appendChild(document.createTextNode(id.name));
-					ide.data = id;
-					ide.classList.add('trayItem', 'loggedInOnly', 'unselected');
-					id.el = ide;
-					ide.addEventListener('mousedown', function(ev){
-						setSelectedId(id);
-					});
-					idlist.appendChild(ide);
-				});
-				setSelectedId(userData.identities.front().v);
-				var memList = document.getElementById('notedPages');
-				userData.rememberry.forEach(function(st){
-					var mem = document.createElement('div');
-					mem.textContent = st.v.title;
-					mem.classList.add('trayItem', 'loggedInOnly');
-					var known = Position.getp(st.v.id);
-					if(known) known.starred = true;
-					mem.addEventListener('mousedown', function(ev){
-						tryToNavigateToPosition(st.v.id);
-					});
-					st.v.el = mem;
-					memList.appendChild(mem);
-				});
-			}else{
-				//TODO. new user configuration.
-			}
-			document.body.classList.add('loggedIn');
-		}else{
-			userData = null;
-			authToken = null;
-			clearEl(document.getElementById('notedPages'));
-			clearEl(document.getElementById('identities'));
-			document.body.classList.remove('loggedIn');
-			setEditMode(false);
-		}
-		identified = whether;
-	}
+function identityEl(ident){
+	var ide = document.createElement('div');
+	ide.appendChild(iconFor(ident, 8));
+	ide.appendChild(document.createTextNode(ident.name));
+	ide.data = ident;
+	ide.classList.add('trayItem', 'loggedInOnly', 'unselected');
+	ident.el = ide;
+	ide.addEventListener('mousedown', function(ev){
+		setSelectedId(ident);
+	});
+	return ide;
 }
 
-function awaitRequest(httpType, address, data, contentType){
-	var pr = new Awaited();
-	var q = new XMLHttpRequest();
-	q.open(httpType, address, true);
-	if(contentType)
-		q.setRequestHeader('Content-Type', contentType);
-	q.onreadystatechange = function(ev){
-		if(q.readyState === 4){
-			if(q.status === 200){
-				var o;
-				try{
-					o = JSON.parse(q.responseText);
-				}catch(e){
-					console.error('json malformed. wtf, server?');
-					pr.ashame();
-					return;
-				}
-				pr.publish(o);
-			}else{
-				console.error('problem fetching json. ' + q.status + '.');
-				pr.ashame();
-			}
-		}
-	};
-	q.ontimeout = function(ev){
-		console.error('ajax query took too long. Network problem?');
-		pr.ashame();
-	};
-	q.send(data || null);
-	return pr;
-}
-
-function postJsonGetJson(address, data){ //returns an awaited<json of response>.
-	return awaitRequest('POST', address, JSON.stringify(data), 'application/json');
-}
-
-function postDataGetJson(address, data){ //returns an awaited<json of response>.
-	return awaitRequest('POST', address, data);
-}
-
-function fetchJson(address){ //returns an awaited<json of response>.
-	return awaitRequest('GET', address, null);
+function fetchPosition(pId){
+	return fetchJson('data/'+pId);
 }
 
 function fetchPositionSurrounds(pId){
 	return fetchJson('surrounding/'+pId);
-}
-
-function fetchDependencies(positionData){ //returns awaited that publishes the completed positionData. realms need to be fetched.
-	var aw = new Awaited();
-	if(positionData.realm.constructor == String){
-		Realm.getFuture(positionData.realm).then(function(o){
-			positionData.realm = o;
-			aw.publish(positionData);
-		}, function(note){
-			aw.ashame(note);
-		});
-	}else{ //else the realm is a realm and it is complete
-		aw.publish(positionData);
-	}
-	return aw;
-}
-
-function integratePositionData(os){
-	var deps = [];
-	os.forEach(function(c){
-		deps.push(fetchDependencies(c));
-	});
-	var resolved = awaitAll.apply(null, deps);
-	resolved.then(function(){
-		for(var i=0; i<arguments.length; ++i){
-			Position.instateOrUpdate(arguments[i]);
-		}
-	});
-	return resolved;
 }
 
 var navagating = new DataSource();
@@ -1815,9 +1912,10 @@ function tryToNavigateToPosition(datSpec, isPopping){ //datSpec can be an id, or
 	}
 	var moved = startMoving(!(  (isPopping != undefined)? isPopping : (dat == previousPosition)  ));
 	if(dat && dat.isReadable){
-		dat.tread();
 		moved.then(function(){
+			dat.tread();
 			slideInPosition(dat);
+			dat.update();
 		});
 	}else{
 		//fetch it, show loading animation.
@@ -1825,7 +1923,8 @@ function tryToNavigateToPosition(datSpec, isPopping){ //datSpec can be an id, or
 		var hadDat = !!dat;
 		var wasReadable = hadDat && dat.isReadable;
 		awaitAll(
-			fetchPositionSurrounds(pId).flatmap(integratePositionData),
+			fetchPositionSurrounds(pId).flatmap(function(poses){
+				return awaitAll(poses.map(function(p){return Position.instateOrUpdate(p)}))}), //And at that, the acolyte understood why a functional PL needs types.
 			moved
 		).then(function(o, nothing){
 			var pos = Position.getp(pId);
@@ -1833,12 +1932,12 @@ function tryToNavigateToPosition(datSpec, isPopping){ //datSpec can be an id, or
 				pos.tread();
 				slideInPosition(pos);
 			}else{
-				console.error("The server's response did not contain the requested position data. Wtf? Seriously, wtf??");
+				pushLine("The server's response did not contain the requested position data. Wtf? Seriously, wtf??", true);
 			}
 			setLoadingMode(false);
 		},function(note){
 			setLoadingMode(false);
-			console.error('Failed to fetch the position data because '+note+'. Please refresh.');
+			pushLine('Failed to fetch the position data because '+note+'. Please refresh.', true);
 			//TODO, notify of error
 		});
 	}
@@ -1869,18 +1968,78 @@ function loggingin(assertion){
 			fail();
 		}else if(o.status == "shiny"){
 			communistBear = 12;
-			userData = o.user;
-			//prep user data
-			userData.rememberry = new List().fromArray(userData.rememberry);
-			userData.identities = new List().fromArray(userData.identities);
-			authToken = o.token;
-			loggedIn(true);
-			pushLine('logged in as ' + userData.email);
+			personaLoggedIn = true;
+			setUserData(o.user);
 		}else{
 			fail(o.detail?  o.status + ', ' + o.detail: o.status);
 		}
 	},
 		fail);
+}
+
+function setUserData(udat){ //IE, log in
+	var controls = document.getElementById('controls');
+	if(udat){
+		userData = udat;
+		userData.rememberry = new List().fromArray(udat.rememberry);
+		userData.identities = new List().fromArray(udat.identities);
+		pushLine('logged in as ' + userData.email);
+		if(!userData.identities.isEmpty()){
+			var idlist = document.getElementById('identities');
+			userData.identities.forEach(function(idc){
+				idlist.appendChild(identityEl(idc.v));
+			});
+			var oldIdSelection = localStorage.getObject('selectedId', null);
+			if(oldIdSelection){
+				var id = userData.identities.findFirstMatch(function(cid){return cid.id == oldIdSelection;});
+				if(id) setSelectedId(id.v);
+			}else
+				setSelectedId(userData.identities.front().v);
+			var memList = document.getElementById('notedPages');
+			userData.rememberry.forEach(function(st){
+				var mem = document.createElement('div');
+				mem.textContent = st.v.title;
+				mem.classList.add('trayItem', 'loggedInOnly');
+				var known = Position.getp(st.v.id);
+				if(known) known.starred = true;
+				mem.addEventListener('mousedown', function(ev){
+					tryToNavigateToPosition(st.v.id);
+				});
+				st.v.el = mem;
+				memList.appendChild(mem);
+			});
+		}else{
+			//TODO. new user configuration.
+		}
+		localStorage.setObject('email', userData.email);
+		localStorage.setObject('token', userData.token);
+		document.body.classList.add('loggedIn');
+	}else{
+		userData = null;
+		clearEl(document.getElementById('notedPages'));
+		clearEl(document.getElementById('identities'));
+		document.body.classList.remove('loggedIn');
+		setEditMode(false);
+	}
+}
+
+function setTheme(light){
+	if(lightTheme ^ light){
+		lightTheme = light;
+		if(light){
+			document.body.classList.add('lightTheme');
+		}else{
+			document.body.classList.remove('lightTheme');
+		}
+		var changerList = document.getElementsByClassName('updateOnThemeChange');
+		for(var i=0; i<changerList.length; ++i){
+			if(changerList[i].themeChangeCallback)
+				changerList[i].themeChangeCallback(light);
+			else //assumes svg
+				changerList[i].style.color = foregroundColor();
+		}
+		localStorage.setObject('theme', light);
+	}
 }
 
 function setEditMode(whether){
@@ -1889,21 +2048,11 @@ function setEditMode(whether){
 			document.body.classList.add('editMode');
 			document.getElementById('title').contentEditable = true;
 			graff.setEditMode(whether);
-			//update treversalLinkElement text if necessary
-			if(treversalLink){
-				treversalLink.linkFrom(currentPosition).element.innerHTML =
-					treversalLink.linkFrom(currentPosition).relationship;
-			}
 			editor.activate();
 		}else{
 			document.body.classList.remove('editMode');
 			document.getElementById('title').contentEditable = false;
 			graff.setEditMode(whether);
-			//update treversalLinkElement text if necessary
-			if(treversalLink){
-				treversalLink.linkFrom(currentPosition).element.innerHTML =
-					treversalLink.other(currentPosition).title;
-			}
 			editor.deactivate();
 		}
 		isEditMode = whether;
@@ -1911,34 +2060,63 @@ function setEditMode(whether){
 }
 
 function loggingout(){
-	loggedIn(false);
+	setUserData(null);
 }
 
-function iconFor(identity, width, color){
+function iconFor(identity, width, colorLight, colorDark){
 	var can = document.createElement('canvas');
 	can.width = can.height = width;
-	var con = can.getContext('2d');
-	con.fillStyle = color || 'rgb(0,0,0)';
-	pathHexFace(con, identity.id.hashCode() ^ 666);
-	con.fill();
+	can.themeChangeCallback = function(light){
+		var con = can.getContext('2d');
+		con.clearRect(0,0, can.width,can.height);
+		con.fillStyle =
+			(colorLight && (colorLight.constructor == Function ?
+				colorLight() :
+				(light? colorLight : colorDark))) || foregroundColor();
+		pathHexFace(con, identity.id.hashCode());
+		con.fill();
+	}
+	can.themeChangeCallback(lightTheme);
+	can.classList.add('updateOnThemeChange');
 	return can;
+}
+
+function updateIdenticon(){
+	if(!selectedId) return;
+	var godfd = document.getElementById('godFaceContainer');
+	if(godfd.firstChild){
+		godfd.removeChild(godfd.firstChild);
+	}
+	var hasPerms = currentPosition.controlledBy(selectedId);
+	var fac = iconFor(
+		selectedId, 24,
+		hasPerms? foregroundColor : treadedNodeColor);
+	bindToolTip(
+		event(fac, 'mouseover').map(function(ev){
+			var p = elementLocation(fac);
+			p.x += fac.offsetWidth/2;
+			p.y += fac.offsetHeight;
+			return {
+				p:p,
+				text: hasPerms?
+					'this realm is yours':
+					'you do not have permission to alter this realm'};
+		}),
+		event(fac, 'mouseout'))
+	fac.id = 'godFace';
+	godfd.appendChild(fac);
 }
 
 function setSelectedId(id){
 	if(selectedId == id) return;
+	selectedId = id;
 	if(selectedIdTag){
 		selectedIdTag.classList.add('unselected');
 	}
 	id.el.classList.remove('unselected');
 	selectedIdTag = id.el;
-	var godfd = document.getElementById('godFaceContainer');
-	if(godfd.firstChild){
-		godfd.removeChild(godfd.firstChild);
-	}
-	var fac = iconFor(id, 50, userIconBackdrop);
-	fac.id = 'godFace';
-	godfd.appendChild(fac);
-	selectedId = id;
+	updateIdenticon();
+	localStorage.setObject('selectedId', id.id);
 }
 
 var smoothDeploymentCount = 0;
@@ -1950,8 +2128,10 @@ function deployTray(pushed){
 		if(smoothDeploymentCount > 0)
 			--smoothDeploymentCount;
 	}else{
-		if(++smoothDeploymentCount > 4)
+		if(++smoothDeploymentCount > 4){
+			localStorage.setObject('proDeployer', true);
 			document.body.classList.add('proDeployer');
+		}
 	}
 	document.body.classList.add('controlsDeployed');
 	controlsShown = true;
@@ -1974,6 +2154,9 @@ function setTrayDeploysOnMouse(bool){
 var pushLineTimeout = null;
 var pushBuffer = new List();
 function pushLine(text, alarm){
+	if(pushLineTimeout != null){
+		pushBuffer.pushFront({t:text, a:alarm});
+	}
 	var backlog = document.getElementById('backlog');
 	var cli = document.getElementById('cli');
 	if(cli.value.length){
@@ -1992,9 +2175,114 @@ function pushLine(text, alarm){
 	pushLineTimeout = setTimeout(function(){
 		backlog.style.top = (- backlog.offsetHeight)+'px';
 		pushLineTimeout = null;
-	}, 1000 + (text? text.length*70 : 0));
+		if(!pushBuffer.isEmpty()){
+			var nl = pushBuffer.popBack().v;
+			pushLine(nl.t, nl.a);
+		}
+	}, 2640 + (text? text.length*51 : 0));
 }
 
+var commands = { //op returns true iff you want command.usage to be pushlined.
+	'destroy':{
+		about:"irrecoverably destroys the current position.",
+		op:function(args){
+			outputTransaction(currentPosition.destroyRightly());
+		}},
+	'remember':{
+		about:"puts the current position in your control bar for later reference.",
+		op:function(args){
+			outputTransaction(currentPosition.setStarred(true));
+		}},
+	'forget':{
+		about:"removes the current position from your stores.",
+		op:function(args){
+			outputTransaction(currentPosition.setStarred(false));
+		}},
+	'nameself':{
+		usage: "<new god name>", about:"renames your currently selected identity.",
+		op:function(args){
+			if(args[2]){
+				outputTransaction(doTransactions(identityNameOp(selectedId, args[2]))); //UI wont update. TODO I guess..
+			}else{
+				return true;
+			}
+		}},
+	'induct':{
+		usage: "<god id>", about:"gives the referenced god permission to alter the realm you're currently in.",
+		op:function(args){
+			if(args[2]){
+				outputTransaction(doTransactions(inductOp(currentPosition.realm, args[2])));
+			}else{
+				return true;
+			}
+		}},
+	'createrealm':{
+		usage: "<evocative name>", about:"creates a new realm.",
+		op:function(args){
+			if(args[2]){
+				outputTransaction(coinRealm(args[2]));
+			}else{
+				return true;
+			}
+		}},
+	'createidentity':{
+		usage: "[<god name>]", about:"creates a new identity for you, with the given name, or a generated name if none is given.",
+		op:function(args){
+			outputTransaction(createIdentity(args[2]));
+		}},
+	'warp':{
+		usage: "<position id>", about:"warps you to the given location.",
+		op:function(args){
+			if(args[2])
+				tryToNavigateToPosition(args[2]);
+			else
+				return true;
+		}},
+	'yank':{
+		usage: "<realm id>", about:"takes the current position into the given realm. You must must control both the position and the realm to do this.",
+		op:function(args){
+			if(args[2])
+				if(validResId(args[2])){
+					Realm.getFuture(args[2]).then(function(args){
+						outputTransaction(currentPosition.setRealm(args));
+					},function(note){
+						pushLine("Couldn't get referenced realm. "+note, true);
+					});
+				}else
+					pushLine('invalid realm id', true);
+			else
+				return true;
+		}},
+	'revert':{
+		about:"updates this position with the state stored on the server.",
+		op:function(args){
+			outputTransaction(currentPosition.discardChanges());
+		}},
+	'help':{
+		about:"tells you about the commands", usage: '[<command>]',
+		op:function(args){
+			var put = function(name){
+				var command = commands[name];
+				if(command){
+					if(command.about)
+						pushLine(name+': '+command.about);
+					else
+						pushLine(name+": no info");
+					if(command.usage)
+						pushLine('usage: '+name+' '+command.usage);
+				}
+			};
+			if(args[2]){
+				if(commands[args[2]])
+					put(args[2]);
+				else
+					pushLine('\''+args[2]+'\' is not a command', true);
+			}else{
+				for(var c in commands)
+					put(c);
+			}
+		}}
+};
 var cliParse = /^([a-z]+)\s*(.*)/;
 var outputTransaction = function(v){output(v, function(v){return v.detail;})};
 function processLine(){
@@ -2002,47 +2290,25 @@ function processLine(){
 	var cli = document.getElementById('cli');
 	var res = cliParse.exec(cli.value);
 	if(res){
-		switch(res[1]){
-		case 'destroy':
-			outputTransaction(currentPosition.destroyRightly());
-		break;
-		case 'star':
-			outputTransaction(currentPosition.setStarred(true));
-		break;
-		case 'unstar':
-			outputTransaction(currentPosition.setStarred(false));
-		break;
-		case 'nameself':
-			if(res[2]){
-				outputTransaction(doTransactions(identityNameOp(selectedId, res[2]))); //UI wont update. TODO I guess..
-			}else{
-				pushLine('no, nameself <name>. You have to give a name.', true);
-			}
-		break;
-		case 'induct':
-			if(res[2]){
-				outputTransaction(doTransactions(inductOp(currentPosition.realm, res[2])));
-			}else{
-				pushLine("usage: induct <id>. How to get the ID number? You figure it out.", true);
-			}
-		break;
-		case 'createrealm':
-			if(res[2]){
-				outputTransaction(Realm.createNew(res[2]));
-			}else{
-				pushLine("usage: createrealm <realm name>", true);
-			}
-		break;
-		default:
+		var command = commands[res[1]];
+		if(command){
+			if(command.op(res))
+				pushLine(command.usage, true);
+		}else{
 			pushLine('command not recognized', true);
-		break;
 		}
-	}
+	}else
+		pushLine('invalid syntax', true);
 	cli.value = '';
 }
 
+var otherTooltipDSOff = null;
 function bindToolTip(dsOn, dsOff){ //dsOn must send {p[x,y], text}
 	dsOn.then(function(o){
+		if(otherTooltipDSOff){
+			otherTooltipDSOff.publish();
+		}
+		otherTooltipDSOff = dsOff;
 		var p = o.p;
 		var text = o.text;
 		if(!text || text == '') return;
@@ -2058,7 +2324,8 @@ function bindToolTip(dsOn, dsOff){ //dsOn must send {p[x,y], text}
 		ttsp.style.top = t+'px';
 		ttsp.classList.add('opaque');
 		var offs = dsOff.then(function(){
-			if(offs) offs.unsubscribe(); //callee can get called before the return of ::then in the case of an immediately satisfied awaited. 
+			if(offs) offs.unsubscribe(); //callee can get called before the return of ::then in the case of an immediately satisfied awaited.
+			otherTooltipDSOff = null;
 			ttsp.classList.remove('opaque');
 			setTimeout(function(){
 				document.body.removeChild(ttsp);
@@ -2088,24 +2355,28 @@ function output(awaited, transform){
 function mouseMove(ev){
 	if(trayDeploysOnMouse){
 		if(!controlsShown){
-			if(ev.x < 1)
+			if(ev.clientX < 3)
 				deployTray();
-		}else{
-			if(ev.x > 9 && !trayPushedOut){
-				if(trayItemActivationMethod)
-					trayItemActivationMethod();
-				hideTray();
-			}
-		}
-	}
-	if(controlsShown){
-		if(!pointWithinElement(document.getElementById('controls'), ev)){
-			hideTray();
 		}
 	}
 	return false;
 }
 window.addEventListener('mousemove', mouseMove);
+
+var graphCentral = false;
+window.addEventListener('scroll', function(ev){
+	if(graphCentral){
+		if(window.pageYOffset + window.innerHeight - 2 < document.body.offsetHeight){
+			graphCentral = false;
+			graff.setGravity(0,0.5);
+		}
+	}else{
+		if(window.pageYOffset + window.innerHeight + 2 >= document.body.offsetHeight){
+			graphCentral = true;
+			graff.setGravity(0,0);
+		}
+	}
+});
 
 function size(){
 	var page = document.getElementById('page');
@@ -2117,7 +2388,7 @@ function size(){
 	var sh = window.innerHeight;
 	spinner.style.left = Math.round((sw - spinner.offsetWidth)/2) + 'px';
 	spinner.style.top = Math.round((sh - spinner.offsetHeight)/2) + 'px';
-	prop.style.height = Math.round(window.innerHeight*0.73)+'px';
+	prop.style.height = Math.round(window.innerHeight*0.86)+'px';
 	var contentPreferredWidth = 530;
 	var contentWidth = (sw < contentPreferredWidth)?sw:contentPreferredWidth;
 	page.style.left = Math.round((sw - contentWidth)/2)+'px';
@@ -2154,8 +2425,45 @@ function mouseModeDetectionBegin(){
 	document.body.addEventListener('click', mouseModeDetectionClick);
 }
 
+var keyEnter=false;
+document.addEventListener('keydown', function(kev){
+	if(!hasEditableText(document.activeElement)){
+		switch(kev.keyCode){
+			case 37: //left
+				history.back();
+			break;
+			case 39: //right
+				history.forward();
+			break;
+		}
+	}
+	switch(kev.keyCode){
+		case 13:
+			if(!keyEnter && kev.ctrlKey){
+				keyEnter = true;
+				outputTransaction(currentPosition.save());
+				kev.preventDefault();
+				kev.stopPropagation();
+			}
+		break;
+	}
+});
+document.addEventListener('keyup', function(kev){
+	switch(kev.keyCode){
+		case 13:
+			keyEnter = false;
+		break;
+	}
+});
+
 
 document.addEventListener('DOMContentLoaded', function(){
+	
+	setTheme(localStorage.getObject('theme', false));
+	
+	if(localStorage.getObject('proDeployer', false)){
+		document.body.classList.add('proDeployer');
+	}
 	
 	editor = new MediumEditor('.editable', {
 		buttons: ['bold', 'italic', 'underline', 'anchor', 'header1'],
@@ -2173,11 +2481,43 @@ document.addEventListener('DOMContentLoaded', function(){
 			deployTray(true);
 		}
 	});
+	pageOver.then(hideTray);
 	login.addEventListener('mousedown', function(ev){
-		navigator.id.request();
+		var personaLogin = function(){
+			navigator.id.request({siteName: "The Manifold Realms"});
+		}
+		var oldEmail = localStorage.getObject('email', null);
+		var oldToken = localStorage.getObject('token', null);
+		if(oldEmail && oldToken){
+			//we'll have to eschew our asynchronous vestments, if the token isn't enough, we need to do a persona login, and that needs a popup. Chrome will block popups if they're not happening as the direct result of a user action- an asynchronous callback, apparently, is not direct enough.
+			var q = new XMLHttpRequest();
+			q.open('POST', 'tokenLogin', false);
+			q.setRequestHeader('Content-Type', 'application/json');
+			q.send(JSON.stringify({email: oldEmail, authorizationKey: oldToken}));
+			if(q.status == 200){
+				personaLoggedIn = false;
+				var o;
+				try{
+					o = JSON.parse(q.responseText);
+					setUserData(o);
+				}catch(e){
+					pushLine('json malformed. wtf, server?', true);
+				}
+			}else if(q.status == 406){
+				pushLine("It's been a while. Verify your identity again.");
+				localStorage.removeItem('email');
+				localStorage.removeItem('token');
+				personaLogin();
+			}
+		}else{
+			personaLogin();
+		}
 	});
 	logout.addEventListener('mousedown', function(ev){
-		navigator.id.logout();
+		if(personaLoggedIn)
+			navigator.id.logout();
+		else
+			setUserData(null);
 	});
 	navigator.id.watch({
 		loggedInUser:null,
@@ -2218,7 +2558,7 @@ document.addEventListener('DOMContentLoaded', function(){
 	var finalWord = /\w+$/;
 	cli.addEventListener('input', function(ev){
 		switch(ev.which){
-		case 32: //space
+		case 32://space
 			//so autocomplete if matches
 			
 		break;
@@ -2248,6 +2588,11 @@ document.addEventListener('DOMContentLoaded', function(){
 		title.focus();
 	});
 	
+	var themeSwitcher = document.getElementById('themeSwitcher');
+	themeSwitcher.addEventListener('mousedown', function(ev){
+		setTheme(!lightTheme);
+	});
+	
 	var graffcontainer = document.getElementById('graff');
 	graff = new Graff(graffcontainer);
 	graff.setGravity(0, 0.53, true);
@@ -2260,17 +2605,12 @@ document.addEventListener('DOMContentLoaded', function(){
 	bindToolTip(graff.nodeHoverListeners, placeTooltipOff);
 	
 	size();
-	
-	if(surroundData){
-		integratePositionData(surroundData);
-	}
-	
-	tryToNavigateToPosition(startingId);
+	var resource = filterAbbreviatedPosIdFromResource.exec(window.location.pathname);
+	tryToNavigateToPosition((resource && resource[1]) || '47');
 });
 
 window.addEventListener('load', function(){
 	var ghosty = document.getElementById('ghosty');
-	document.getElementById('ghostyMimic').style.height = ghosty.offsetHeight+'px';
 });
 
 window.addEventListener('resize', function(ev){size()});

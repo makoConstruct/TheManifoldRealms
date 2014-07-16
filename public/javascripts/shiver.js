@@ -1,50 +1,5 @@
 //mako.shiv(javascript);
 
-// var tests = { //no. By reason alone. If this gives me any more trouble, then a framework. Not before.
-// 	'baseline': function(list){
-// 		var arr = [1,2,3,4];
-// 		list.pushFront(1);
-// 		list.pushFront(2);
-// 		list.pushFront(3);
-// 		list.pushFront(4);
-// 		var i = 0;
-// 		var success = true;
-// 		list.forEach(function(c){if(c.v != arr[i++]) success = false;})
-// 		return success;
-// 	},
-// 	'middle insertions': function(list){
-// 		var arr = [1,4,2,3];
-// 		var it = list.pushFront(1);
-// 		list.pushFront(2);
-// 		list.pushFront(3);
-// 		list.insertAfter(it, 4);
-// 		var i = 0;
-// 		var success = true;
-// 		list.forEach(function(c){if(c.v != arr[i++]) success = false;})
-// 		return success;
-// 	}
-// 	'end insertions': function(list){
-// 		var arr = [1,2,3];
-// 		list.pushFront(1);
-// 		list.pushFront(2);
-// 		var it = list.pushFront(3);
-// 		list.insertAfter(it, 4);
-// 		var i = 0;
-// 		var success = true;
-// 		list.forEach(function(c){if(c.v != arr[i++]) success = false;})
-// 		return success;
-// 	}
-// };
-// var success = true;
-// for (c in tests){
-// 	if(!tests[c](new List())){
-// 		console.log(c + ' failed.');
-// 		success = false;
-// 	}
-// }
-// if(success)
-// 	console.log('all tests pass');
-
 
 function List(comparator){ //all just for constant time removal :[
 	if(comparator) this.comparator = comparator;
@@ -60,6 +15,13 @@ List.prototype ={
 	front: function(){return this.sentinel;},
 	isEnd: function(node){return this.sentinel && this.sentinel.prev == node;},
 	isFront: function(node){return this.sentinel && this.sentinel == node;},
+	popBack: function(){
+		if(this.sentinel){
+			var ret = this.sentinel.prev;
+			this.removeNode(ret);
+			return ret;
+		}else return null;
+	},
 	insertFront: function(node){
 		if(this.sentinel)
 			this.insertBefore(this.sentinel, node);
@@ -217,19 +179,17 @@ List.prototype ={
 		}while(v.v);
 		this.iterationStack.pop();
 	},
-	// backwardsForEach: function(f){ //
-	// 	this.trackedNode = this.sentinel;
-	// 	while(this.sentinel){
-	// 		if(this.trackedNode.prev == this.sentinel){
-	// 			f(this.trackedNode.prev);
-	// 			break;
-	// 		}else{
-	// 			f(this.trackedNode.prev);
-	// 			this.trackedNode = this.trackedNode.prev;
-	// 		}
-	// 	}
-	// 	this.trackedNode = undefined;
-	// },
+	backwardsForEach: function(f){ //NOTE. f is fed elements, not nodes. different from the other foreaches.
+		var ar = this.toArray();
+		for (var i = ar.length - 1; i >= 0; i--) {
+			f(ar[i]);
+		}
+	},
+	toArray: function(){
+		var out = [];
+		this.forEach(function(c){out.push(c.v)});
+		return out;
+	},
 	shallowClone: function(){
 		var n = new List();
 		this.forEach(function(o){n.pushBack(o.v);});
@@ -364,6 +324,11 @@ DataSource.prototype.then = function(callback){
 	var listNode = this.listeners.pushBack(callback);
 	return new SubHandle(listNode, this.listeners);
 };
+DataSource.prototype.map = function(otof){
+	var ds = new DataSource();
+	this.then(function(res){ds.publish(otof(res))});
+	return ds;
+};
 DataSource.prototype.publish = function(valOfMoment){
 	this.valOfMoment = valOfMoment;
 	this.arrived = true;
@@ -373,6 +338,9 @@ DataSource.prototype.publish = function(valOfMoment){
 //and these are basically futures.
 function Awaited(){
 	this.listeners = new List();
+	if(arguments.length){
+		this.publish(arguments[0]);
+	}
 }
 Awaited.prototype.listeners = null;
 Awaited.prototype.fail = false;
@@ -411,6 +379,13 @@ Awaited.prototype.flatmap = function(otof){
 		function(note){aw.ashame(note)});
 	return aw;
 };
+Awaited.prototype.map = function(otof){
+	var aw = new Awaited();
+	this.then(
+		function(res){aw.publish(otof(res))},
+		function(note){aw.ashame(note)});
+	return aw;
+};
 Awaited.prototype.publish = function(result){
 	if(this.arrived)
 		throw Error("no you shouldn't do that! An Awaited can only be received once!");
@@ -419,8 +394,8 @@ Awaited.prototype.publish = function(result){
 	this.listeners.forEach(function(l){if(l.v.succ) l.v.succ(result)});
 	this.listeners = null; //free the callback closures
 };
-function awaitAll(){ //this and the following method can be used on datasources or awaiteds. They're variadic.
-	var inlist = arguments;
+function awaitAll(){ //this and the following method can be used on datasources or awaiteds. They're variadic. If the iniput is an array it'll treat that as an argument list instead.
+	var inlist = (arguments[0].constructor == Array)? arguments[0] : arguments;
 	var ret = new Awaited();
 	var retlist = new Array(inlist.length);
 	var failed = false;
@@ -520,4 +495,51 @@ function awaitTime(milliseconds){
 	var pr = new Awaited();
 	setTimeout(function(){pr.publish();}, milliseconds);
 	return pr;
+}
+
+function event(element, eventName){ //returns DataSource[ev]
+	var ds = new DataSource();
+	element.addEventListener(eventName, function(ev){ds.publish(ev)});
+	return ds;
+}
+
+function awaitRequest(httpType, address, data, contentType){
+	var pr = new Awaited();
+	var q = new XMLHttpRequest();
+	q.open(httpType, address, true);
+	if(contentType)
+		q.setRequestHeader('Content-Type', contentType);
+	q.onreadystatechange = function(ev){
+		if(q.readyState === 4){
+			if(q.status === 200){
+				var o;
+				try{
+					o = JSON.parse(q.responseText);
+				}catch(e){
+					pr.ashame('json malformed. wtf, server?');
+					return;
+				}
+				pr.publish(o);
+			}else{
+				pr.ashame('problem fetching json. ' + q.status + '.');
+			}
+		}
+	};
+	q.ontimeout = function(ev){
+		pr.ashame('ajax query took too long. Network problem?');
+	};
+	q.send(data || null);
+	return pr;
+}
+
+function postJsonGetJson(address, data){ //returns an awaited<json of response>.
+	return awaitRequest('POST', address, JSON.stringify(data), 'application/json');
+}
+
+function postDataGetJson(address, data){ //returns an awaited<json of response>.
+	return awaitRequest('POST', address, data);
+}
+
+function fetchJson(address){ //returns an awaited<json of response>.
+	return awaitRequest('GET', address, null);
 }
