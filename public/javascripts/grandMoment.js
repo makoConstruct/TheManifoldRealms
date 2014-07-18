@@ -337,37 +337,36 @@ render: function(timestamp){
 		var pt = this.toScreen(this.layout.point(this.focusNode).p);
 		// this.underlayPip.render(this.cancon, pt);
 	}
-	var dis = this;
+	var self = this;
 	this.layout.eachEdge(function(edge, spring){
-		dis.drawEdge(edge.source, edge.target);
+		self.drawEdge(edge.source, edge.target);
 	});
 	// if(this.anchorNode){
 	// 	var snp = this.toScreen(this.layout.nodePoints[this.anchorNode.id].p);
 	// 	this.drawEdge(snp, this.mousePosition);
 	// }
 	this.layout.eachNode(function(node, point){
-		dis.drawNode(dis.toScreen(point.p), node.data.grandMomentData.color());
+		self.drawNode(self.toScreen(point.p), node.data.grandMomentData.color());
 	});
 	this.layout.eachNode(function(node, point){
 		var p = node.data.grandMomentData.lighting;
-		var o = node.data.grandMomentData.lightingOpacity;
-		if(node.data.grandMomentData != currentPosition && p && p > 0 && o && o > 0){
+		if(node.data.grandMomentData != currentPosition && p && p > 0){
 			var minThickness = 0.2;
 			var thickness = easeIn(minThickness + (1 - minThickness)*p);
-			var originNodePt = dis.toScreen(
-				dis.layout.point(currentPosition.nodeQueueLNode.v).p);
-			var loc = dis.toScreen(point.p);
+			var originNodePt = self.toScreen(
+				self.layout.point(currentPosition.nodeQueueLNode.v).p);
+			var loc = self.toScreen(point.p);
 			var angle = loc.subtract(originNodePt).angle();
-			var innerRad = dis.pipWidth/2*3;
+			var innerRad = self.pipWidth/2*3;
 			var outerRad = innerRad + thickness*3.1;
-			dis.cancon.beginPath();
+			self.cancon.beginPath();
 			var arcSpread = Math.PI*2/5;
 			// var arcSpread = Math.PI/2;
-			dis.cancon.arc(loc.x, loc.y, innerRad, angle - arcSpread, angle + arcSpread, true);
-			dis.cancon.arc(loc.x, loc.y, outerRad, angle + arcSpread, angle - arcSpread, false);
-			dis.cancon.closePath();
-			dis.cancon.fillStyle = 'rgba('+ dis.highlightRgbStr() +','+ o +')';
-			dis.cancon.fill();
+			self.cancon.arc(loc.x, loc.y, innerRad, angle - arcSpread, angle + arcSpread, true);
+			self.cancon.arc(loc.x, loc.y, outerRad, angle + arcSpread, angle - arcSpread, false);
+			self.cancon.closePath();
+			self.cancon.fillStyle = 'rgba('+ self.highlightRgbStr() +','+ thickness +')';
+			self.cancon.fill();
 		}
 	});
 },
@@ -1645,8 +1644,12 @@ function textualEffectivelyEmpty(el){
 
 var filterAbbreviatedPosIdFromResource = /\/(-?\d+)/;
 
+var previousHovered = null;
 function bindHovers(el, pos){
 	function startIndicate(){
+		if(previousHovered)
+			retractIndicate(previousHovered);
+		previousHovered = pos;
 		if(pos.nodeLightAnimation)
 			pos.nodeLightAnimation.stop();
 		if(pos.nodeFadeAnimation)
@@ -1655,11 +1658,8 @@ function bindHovers(el, pos){
 		pos.nodeLightAnimation = graff.startAnimation(function(time){
 			pos.lighting = currentLighting + (1 - currentLighting)*time;
 		}, 90);
-		pos.nodeFadeAnimation = graff.startAnimation(function(progress){
-			pos.lightingOpacity = 1 - Math.pow(progress, 2);
-		}, 5300);
 	};
-	function retractIndicate(){
+	function retractIndicate(pos){
 		if(pos.nodeLightAnimation)
 			pos.nodeLightAnimation.stop();
 		if(pos.nodeFadeAnimation)
@@ -1669,9 +1669,10 @@ function bindHovers(el, pos){
 			pos.lighting = currentLighting - currentLighting*time;
 		}, 90);
 	};
+	var retractThis = function(){retractIndicate(pos)}
 	el.addEventListener('mouseover', startIndicate);
-	el.addEventListener('mouseout', retractIndicate);
-	el.addEventListener('mousedown', retractIndicate);
+	el.addEventListener('mouseout', retractThis);
+	el.addEventListener('mousedown', retractThis);
 }
 function bindDivToPosition(div, arrow, pos){
 	div.addEventListener('mousedown', function(ev){
@@ -2481,7 +2482,7 @@ document.addEventListener('DOMContentLoaded', function(){
 			deployTray(true);
 		}
 	});
-	pageOver.then(hideTray);
+	controls.addEventListener('mouseleave', hideTray);
 	login.addEventListener('mousedown', function(ev){
 		var personaLogin = function(){
 			navigator.id.request({siteName: "The Manifold Realms"});

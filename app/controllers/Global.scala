@@ -54,7 +54,7 @@ class Position(in:Node) extends Ordered[Position]{ //in must have a realm attach
 	def delvings:Iterator[Relationship] =
 		v.getRelationships(Direction.OUTGOING, TO)
 			.asScala.iterator
-	final def outLinkArray(rs: Iterator[Relationship]) =
+	def outLinkArray(rs: Iterator[Relationship]) =
 		JsArray(rs.toArray.map((r:Relationship) =>{
 			val onode = r.getEndNode
 			Json.obj(
@@ -69,7 +69,7 @@ class Position(in:Node) extends Ordered[Position]{ //in must have a realm attach
 						JsString(r.getProperty("relationship").asInstanceOf[String])
 					else
 						JsNull ) )}))
-	final def inLinkArray(rs: Iterator[Relationship]) =
+	def inLinkArray(rs: Iterator[Relationship]) =
 		JsArray(rs.toArray.map((r:Relationship) =>{
 			val onode = r.getStartNode
 			Json.obj(
@@ -291,8 +291,8 @@ object Global extends GlobalSettings{
 		la.foldRight(0l)((l,r) => (l+r)^(l*r))
 	}
 	var domain:String = null
-	final val placeNameRegexString = "[a-zA-Z0-9]+"
-	final val placeName = placeNameRegexString.r
+	val placeNameRegexString = "[a-zA-Z0-9]+"
+	val placeName = placeNameRegexString.r
 	var globalBean:Node = null
 	val freeNexus:Long = 94l
 	val freeRealm:Long = 7l
@@ -303,7 +303,7 @@ object Global extends GlobalSettings{
 	def db = dbs
 	var hasher:SaltFlatLoper = null
 	def currentTimeSegment = currentTimeMillis/(1000*60*60*24)
-	final val maxAge = 5 //so, basically, a key will be accepted if it's within 6(valid() is inclined to go one extra) segments[6 days] of the current time
+	val maxAge = 5 //so, basically, a key will be accepted if it's within 6(valid() is inclined to go one extra) segments[6 days] of the current time
 	def authorizationKey(id:Long, time:Long):Long =
 		Global.hasher(431861l*id + time) //TODO, use a real large prime
 	def authorizationKey(id:Long):Long =
@@ -347,7 +347,7 @@ object Global extends GlobalSettings{
 		}
 		false
 	}
-	final def purge(n:Node):Unit ={
+	def purge(n:Node):Unit ={
 		for(c <- n.getRelationships.asScala)
 			c.delete
 		n.delete
